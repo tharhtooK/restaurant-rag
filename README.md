@@ -34,3 +34,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Deployment
+
+Production: **https://restaurant-dgzsm6qei-thar5.vercel.app/**
+
+This repo is connected to Vercel with the default Next.js build settings (`next build`, no custom install/output overrides). Every push to `main` deploys to production, and every pull request gets its own preview URL posted automatically.
+
+Vercel builds this project natively from source — it does not use the `Dockerfile` or `compose.yaml` in this repo. Those two files are for local development only (e.g. `docker compose up`); do not try to configure Vercel to build from the Dockerfile.
