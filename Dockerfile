@@ -1,5 +1,5 @@
 # Local development only. Vercel builds this app natively from source and does not use this file.
-FROM node:20-alpine
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 

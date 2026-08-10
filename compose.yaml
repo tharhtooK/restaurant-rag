@@ -7,8 +7,5 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - /app/.next
-    env_file:
-      - .env
     environment:
-      - WATCHPACK_POLLING=true
+      - NEXT_TELEMETRY_DISABLED=1
