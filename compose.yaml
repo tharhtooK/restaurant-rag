@@ -9,3 +9,4 @@ services:
       - /app/node_modules
     environment:
       - NEXT_TELEMETRY_DISABLED=1
+      - WATCHPACK_POLLING=true
