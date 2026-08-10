@@ -1,0 +1,14 @@
+# Local development only. Vercel builds this app natively from source and does not use this file.
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    env_file:
+      - .env
+    environment:
+      - WATCHPACK_POLLING=true
