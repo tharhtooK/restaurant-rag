@@ -50,7 +50,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         submit();
       }}
     >
-      <div className="flex items-end gap-2 rounded-3xl bg-surface px-4 py-2.5">
+      <div className="flex items-center gap-2 rounded-3xl bg-surface px-4 py-2.5">
         <label htmlFor="composer-input" className="sr-only">
           Message
         </label>
