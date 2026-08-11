@@ -16,13 +16,20 @@ function getClient(): OpenAI {
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+export type ToolCallRecord = {
+  name: string;
+  input: unknown;
+  /** Raw JSON string the tool returned. Used by the eval runner to inspect retrieval. */
+  output: string;
+};
+
 export type AgentResult = {
   text: string;
-  toolCalls: { name: string; input: unknown }[];
+  toolCalls: ToolCallRecord[];
 };
 
 export async function runAgent(userMessage: string, history: ChatTurn[] = []): Promise<AgentResult> {
-  const toolCalls: { name: string; input: unknown }[] = [];
+  const toolCalls: ToolCallRecord[] = [];
 
   const input: ResponseInput = [
     ...history.map(
@@ -59,9 +66,9 @@ export async function runAgent(userMessage: string, history: ChatTurn[] = []): P
       } catch {
         // leave args as {} - runTool's zod validation will report the problem
       }
-      toolCalls.push({ name: call.name, input: args });
-
       const output = await runTool(call.name, args);
+      toolCalls.push({ name: call.name, input: args, output });
+
       input.push({
         type: "function_call_output",
         call_id: call.call_id,
