@@ -29,3 +29,35 @@ model Message {
 
   @@index([conversationId, createdAt])
 }
+
+model Restaurant {
+  id                 String   @id @default(cuid())
+  slug               String   @unique
+  name               String
+  neighborhood       String
+  cuisine            String
+  priceTier          Int
+  address            String
+  vegetarianFriendly Boolean  @default(false)
+  hours              Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  reviews Review[]
+
+  @@index([neighborhood])
+  @@index([cuisine])
+  @@index([priceTier])
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  restaurantId String
+  source       String
+  content      String   @db.Text
+  createdAt    DateTime @default(now())
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+}
