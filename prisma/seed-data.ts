@@ -276,8 +276,8 @@ export const restaurants: RestaurantSeed[] = [
       tue: null,
       wed: { open: "17:00", close: "23:00" },
       thu: { open: "17:00", close: "23:00" },
-      fri: { open: "17:00", close: "24:00" },
-      sat: { open: "12:00", close: "24:00" },
+      fri: { open: "17:00", close: "23:00" },
+      sat: { open: "12:00", close: "23:00" },
       sun: { open: "12:00", close: "22:00" },
     },
     reviews: [
