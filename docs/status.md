@@ -19,8 +19,8 @@ Against the planned order of operations:
 | 5 | run scrape | ⛔️ substituted | hand-written mock data instead |
 | 6 | postgres schema | ✅ done | [`prisma/schema.prisma`](../prisma/schema.prisma) |
 | 7 | normalize + load | ◐ partial | [`prisma/seed.ts`](../prisma/seed.ts) loads; no raw→normalized stage exists because there is no raw |
-| 8 | chunk | ❌ not started | |
-| 9 | embed + upsert | ❌ not started | |
+| 8 | chunk | ✅ done | no-op at current size — each 1–3 sentence review is already a chunk |
+| 9 | embed + upsert | ✅ done | [`scripts/ingest/embed-upsert.ts`](../scripts/ingest/embed-upsert.ts) — 36 chunks in Pinecone |
 | 10 | tools | ✅ done | [`src/lib/tools/`](../src/lib/tools) — 3 tools |
 | 11 | agent | ✅ done | [`src/lib/agent/`](../src/lib/agent) — OpenAI Responses API |
 | 12 | eval harness | ❌ **not started** | `evals/golden.json` exists; no runner |
@@ -35,34 +35,40 @@ there — no environment variables are configured in Vercel.
 ## Architecture as built
 
 ```
-src/lib/tools/          provider-agnostic retrieval
+src/lib/tools/          retrieval
   filter-restaurants.ts   SQL path: neighborhood, cuisine, price tier, veg flag, hours
-  search-opinions.ts      Postgres full-text search over Review.content (vector stand-in)
+  search-opinions.ts      vector path: Pinecone semantic search over review chunks
   get-restaurant-details.ts  single-entity lookup
+src/lib/
+  pinecone.ts             Pinecone + embedding clients (lazy singletons)
+  db.ts                   Prisma client (lazy singleton)
 src/lib/agent/
   index.ts                manual tool-calling loop, OpenAI Responses API (gpt-5.6-terra)
   tools.ts                zod schemas → JSON Schema tool defs + runtime arg validation
   system-prompt.ts        scope, refusal behavior, price-tier legend
+scripts/ingest/
+  embed-upsert.ts         chunk + embed + upsert reviews to Pinecone
 src/app/api/chat/route.ts POST endpoint
 ```
 
 ## Divergences from the original plan
 
-Three were deliberate decisions made during the build:
+Deliberate decisions made during the build:
 
 1. **Scrapers dropped.** Restaurant *identities* are real and verified against live listings
    (names, addresses, hours, price tier). Review text is fabricated — see the eval caveat below.
-2. **Pinecone unused.** The `vector` retrieval route is currently Postgres full-text search.
-   3 goldens are `expected_route: "vector"` and 7 more are `hybrid`, so **10 of 20 goldens —
-   half the set — are graded against a retrieval path the system does not actually have yet.**
-3. **No monorepo split.** The original sketch had `python-scraper/` and `nextjs-rag/` as
+2. **No monorepo split.** The original sketch had `python-scraper/` and `nextjs-rag/` as
    sibling directories; this is a flat Next.js repo. Raised after Step 2, never resolved.
+
+_Resolved 2026-08-11:_ Pinecone was previously unused, with the `vector` route served by
+Postgres full-text search. It is now real (Steps 8–9), so all 10 `vector`/`hybrid` goldens are
+graded against the retrieval path the design actually specifies.
 
 One divergence was **never explicitly decided** and should be:
 
-4. **Prisma vs. drizzle.** The architecture sketch specifies `db/schema.ts # drizzle`, but the
+3. **Prisma vs. drizzle.** The architecture sketch specifies `db/schema.ts # drizzle`, but the
    project runs on Prisma, carried forward from an earlier instruction that predates the sketch.
-   If drizzle is a real requirement, migrating is cheaper now than after ingestion code
+   If drizzle is a real requirement, migrating is cheaper now than after more code
    accumulates on top of Prisma.
 
 ## Known problems
@@ -79,9 +85,17 @@ and should not be reported as one.
 
 ### "All goldens pass" is not a measurement
 
-13 of 20 goldens have been run end-to-end through the agent and checked by eye. There is no
-score, no pass/fail record, and no automation. **Never run end-to-end: G03, G04, G06, G07,
-G08, G10, G14.**
+16 of 20 goldens have been exercised end-to-end through the agent and checked by eye. There is
+still no score, no pass/fail record, and no automation. **Never run end-to-end: G03, G04, G10,
+G14.** (Retrieval for those four has been spot-checked at the tool level, but not through the
+agent.) Step 12 replaces all of this with an actual number.
+
+### Pinecone is eventually consistent
+
+An initial retrieval check run seconds after ingestion scored 7/8 with an obviously wrong
+ranking — a "quiet" restaurant topping a "loud party" query. The identical check scored 8/8
+once the index settled. **Do not measure retrieval immediately after an upsert**; this will
+matter for the Step 12 runner if it ever re-ingests as part of a test cycle.
 
 ### `.env` contains unrelated live credentials
 
@@ -92,22 +106,9 @@ directory.
 
 ## Next steps
 
-Sequence follows the original order of operations: **8 → 9 → 12 → 13.** The eval harness comes
-*after* the semantic path is real. Building the runner against Postgres FTS would baseline a
-retrieval path that is about to be replaced, so every number would need re-taking after the
-swap.
+Steps 8–9 are done, so the sequence is now **12 → 13**, with the semantic path already real.
 
-**1. Chunk (Step 8).** Nearly free at current data size — reviews are 1–3 sentences, so each
-review is already a chunk. The real decision is what gets embedded: individual review snippets
-(finer retrieval, more rows) or restaurant-level composite documents (coarser, fewer rows).
-Snippet-level matches how `search_opinions` returns results today.
-
-**2. Embed + upsert (Step 9).** Embed chunks and upsert to Pinecone with metadata
-(`restaurantSlug`, `neighborhood`) so the existing neighborhood/slug filters survive the move
-to vector search. Then rewrite `search-opinions.ts` to query Pinecone instead of `to_tsquery`.
-This affects half the golden set (10 of 20 route `vector` or `hybrid`), so it is not a side quest.
-
-**3. Build the eval runner (Step 12).** Run all 20 goldens and check:
+**1. Build the eval runner (Step 12).** Run all 20 goldens and check:
 
 - `expected_route` vs. the tools the agent actually called
 - `required_restaurant_slugs` present / `forbidden_restaurant_slugs` absent in retrieved results
@@ -116,13 +117,22 @@ This affects half the golden set (10 of 20 route `vector` or `hybrid`), so it is
 Output a per-item table plus an overall pass rate. This converts hand-verification into a
 number and is a precondition for Step 13's failure loop.
 
-**4. Failure loop (Step 13).** Depends on 3.
+**2. Failure loop (Step 13).** Depends on 1.
 
-### Open decisions blocking the above
+### Infrastructure (verified 2026-08-11)
 
-- **Pinecone index.** `.env` currently points at `PINECONE_INDEX=medical-notes`, which belongs
-  to a different project. Restaurant vectors must not be written there. A dedicated index is
-  needed before Step 9 can run.
+- **Pinecone index `restaurants`** — 1536 dims, cosine, 36 records. Dedicated to this
+  project (separate from the `medical-notes` and `bible` indexes on the same account).
+  Re-ingest with `docker compose exec web npx tsx scripts/ingest/embed-upsert.ts`.
+- **Embeddings** — `text-embedding-3-small`, 1536 dims. Matches the index.
+- **OpenAI traffic routes through a LiteLLM proxy** (`OPENAI_BASE_URL=parsity-litellm.fly.dev`),
+  not `api.openai.com` — this applies to agent chat calls and embeddings alike. Note that
+  `.env` is loaded by Next.js from the bind-mounted project root, *not* injected as container
+  environment variables, so `docker compose exec web env` will not show these.
+
+### Open decisions
+
 - **Prisma vs. drizzle** — settle before more code lands on Prisma.
 - **Eval circularity** — even a small set of reviews sourced independently of the goldens would
-  make the Step 12 numbers mean something. Worth doing before 12, not after.
+  make the Step 12 numbers mean something. Worth doing before 12, not after. This is now the
+  single largest threat to the credibility of the final eval result.
