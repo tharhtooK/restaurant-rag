@@ -92,8 +92,22 @@ directory.
 
 ## Next steps
 
-**1. Build the eval runner (Step 12).** Highest leverage remaining work; everything downstream
-depends on it. Should run all 20 goldens and check:
+Sequence follows the original order of operations: **8 → 9 → 12 → 13.** The eval harness comes
+*after* the semantic path is real. Building the runner against Postgres FTS would baseline a
+retrieval path that is about to be replaced, so every number would need re-taking after the
+swap.
+
+**1. Chunk (Step 8).** Nearly free at current data size — reviews are 1–3 sentences, so each
+review is already a chunk. The real decision is what gets embedded: individual review snippets
+(finer retrieval, more rows) or restaurant-level composite documents (coarser, fewer rows).
+Snippet-level matches how `search_opinions` returns results today.
+
+**2. Embed + upsert (Step 9).** Embed chunks and upsert to Pinecone with metadata
+(`restaurantSlug`, `neighborhood`) so the existing neighborhood/slug filters survive the move
+to vector search. Then rewrite `search-opinions.ts` to query Pinecone instead of `to_tsquery`.
+This affects half the golden set (10 of 20 route `vector` or `hybrid`), so it is not a side quest.
+
+**3. Build the eval runner (Step 12).** Run all 20 goldens and check:
 
 - `expected_route` vs. the tools the agent actually called
 - `required_restaurant_slugs` present / `forbidden_restaurant_slugs` absent in retrieved results
@@ -102,12 +116,13 @@ depends on it. Should run all 20 goldens and check:
 Output a per-item table plus an overall pass rate. This converts hand-verification into a
 number and is a precondition for Step 13's failure loop.
 
-**2. Decide Prisma vs. drizzle** before more code lands on Prisma.
+**4. Failure loop (Step 13).** Depends on 3.
 
-**3. Decide whether Pinecone is in scope.** This affects half the golden set, so it is not a
-side quest. Either implement embeddings + upsert (Steps 8–9) and make the `vector` route real,
-or cut it explicitly and revise `docs/taxonomy.md` so the route table reflects what the system
-actually does. Half-building it is the worst option.
+### Open decisions blocking the above
 
-**4. Break the eval circularity** if there's time — even a small set of reviews sourced
-independently of the goldens would make the numbers mean something.
+- **Pinecone index.** `.env` currently points at `PINECONE_INDEX=medical-notes`, which belongs
+  to a different project. Restaurant vectors must not be written there. A dedicated index is
+  needed before Step 9 can run.
+- **Prisma vs. drizzle** — settle before more code lands on Prisma.
+- **Eval circularity** — even a small set of reviews sourced independently of the goldens would
+  make the Step 12 numbers mean something. Worth doing before 12, not after.
