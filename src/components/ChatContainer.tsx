@@ -10,37 +10,44 @@ const PROMPT_CHIPS = [
   "open past midnight downtown",
 ];
 
-const FAKE_REPLIES = [
-  "Here's a spot that fits: a dim, candlelit wine bar a few blocks over — small plates, quiet enough to talk, and they don't rush you out. Want the address?",
-  "A few options come to mind. Give me a neighborhood or a cuisine you're leaning toward and I'll narrow it down.",
-  "Good call — that's the kind of place that's better with a reservation. Want me to check what's open tonight?",
-];
-
-function randomFrom<T>(items: T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
 export function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  function handleSend(text: string) {
+  async function handleSend(text: string) {
     if (isThinking) return;
+
+    const history = messages.map(({ role, content }) => ({ role, content }));
 
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", content: text }]);
     setDraft("");
     setIsThinking(true);
 
-    const delay = 700 + Math.random() * 500;
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, history }),
+      });
+
+      const data = await response.json();
+      const content = response.ok && data.text ? data.text : "Sorry, I hit an error answering that. Try again?";
+
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content }]);
+    } catch {
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "assistant", content: randomFrom(FAKE_REPLIES) },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Sorry, I couldn't reach the server. Try again?",
+        },
       ]);
+    } finally {
       setIsThinking(false);
-    }, delay);
+    }
   }
 
   function handleChipClick(prompt: string) {
