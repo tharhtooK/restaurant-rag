@@ -13,9 +13,9 @@
       "cuisine is Korean BBQ",
       "has at least one entree under $20"
     ],
-    "golden_answer": "Seoul Plate in Flushing is your best bet — it's Korean BBQ with several entrees under $20, which is unusually affordable for the category. Most Korean BBQ spots run pricier, but Seoul Plate is specifically known for keeping it accessible without skimping on quality.",
+    "golden_answer": "Picnic Garden in Flushing is your best bet — it's Korean BBQ with several entrees under $20, which is unusually affordable for the category. Most Korean BBQ spots run pricier, but Picnic Garden is specifically known for keeping it accessible without skimping on quality.",
     "grading_rubric": {
-      "must_mention": ["Seoul Plate", "Flushing", "under $20"],
+      "must_mention": ["Picnic Garden", "Flushing", "under $20"],
       "must_not_claim": ["that it's located in Astoria or East Village", "that entrees start above $20"],
       "must_cite": true
     },
@@ -36,14 +36,14 @@
       "open past 11pm",
       "open until 4am Thursday through Saturday"
     ],
-    "golden_answer": "Nightowl Diner in Williamsburg is open until 4am Thursday through Saturday (1am the rest of the week), making it the clear late-night option. The other nearby spots — Smoke Yard, Green Table, and Bowl & Bean — all close at or before 11pm, so they won't work for a late-night visit.",
+    "golden_answer": "Kellogg's Diner in Williamsburg is open until 4am Thursday through Saturday (1am the rest of the week), making it the clear late-night option. The other nearby spots — Fette Sau, Reverie, and Wild Ginger — all close at or before 11pm, so they won't work for a late-night visit.",
     "grading_rubric": {
-      "must_mention": ["Nightowl Diner", "Williamsburg", "4am"],
-      "must_not_claim": ["that Smoke Yard or Green Table are open past 11pm"],
+      "must_mention": ["Kellogg's Diner", "Williamsburg", "4am"],
+      "must_not_claim": ["that Fette Sau or Reverie are open past 11pm"],
       "must_cite": true
     },
     "difficulty": "easy",
-    "notes": "Tests a strict boundary condition — Smoke Yard closes at exactly 11pm, which should NOT satisfy 'after 11pm.' Off-by-one boundary handling."
+    "notes": "Tests a strict boundary condition — Fette Sau closes at exactly 11pm, which should NOT satisfy 'after 11pm.' Off-by-one boundary handling."
   },
   {
     "id": "G03",
@@ -59,10 +59,10 @@
       "tagged as vegetarian-friendly",
       "price tier 2 (moderate, not high-end)"
     ],
-    "golden_answer": "Mezze House in Astoria fits — it's tagged vegetarian-friendly and sits at a moderate price tier, nothing high-end. Taverna Blue is pricier and leans more into meat-forward Greek dishes, and Kebab Corner isn't tagged for vegetarian options, so neither is a great fit here.",
+    "golden_answer": "Aliada in Astoria fits — it's tagged vegetarian-friendly and sits at a moderate price tier, nothing high-end. Amylos Taverna is pricier and leans more into meat-forward Greek dishes, and Balkh Shish Kabab House isn't tagged for vegetarian options, so neither is a great fit here.",
     "grading_rubric": {
-      "must_mention": ["Mezze House", "Astoria", "vegetarian"],
-      "must_not_claim": ["that Taverna Blue is a budget option"],
+      "must_mention": ["Aliada", "Astoria", "vegetarian"],
+      "must_not_claim": ["that Amylos Taverna is a budget option"],
       "must_cite": true
     },
     "difficulty": "medium",
@@ -82,10 +82,10 @@
       "serves breakfast",
       "opens at 8am"
     ],
-    "golden_answer": "Corner Biscuit in Harlem opens at 8am and is breakfast/brunch-focused, so it's your spot. Sweet Home Kitchen doesn't open until 11am and Uptown Grill doesn't open until 5pm for dinner, so neither serves breakfast before 9am.",
+    "golden_answer": "Harlem Biscuit Company in Harlem opens at 8am and is breakfast/brunch-focused, so it's your spot. Manna's Soul Food doesn't open until 11am and Londel's doesn't open until 5pm for dinner, so neither serves breakfast before 9am.",
     "grading_rubric": {
-      "must_mention": ["Corner Biscuit", "Harlem", "8am"],
-      "must_not_claim": ["that Sweet Home Kitchen or Uptown Grill serve breakfast before 9am"],
+      "must_mention": ["Harlem Biscuit Company", "Harlem", "8am"],
+      "must_not_claim": ["that Manna's Soul Food or Londel's serve breakfast before 9am"],
       "must_cite": true
     },
     "difficulty": "medium",
@@ -105,10 +105,10 @@
       "reviewers describe it as romantic or intimate",
       "dim lighting or small-plates format mentioned in reviews"
     ],
-    "golden_answer": "Golden Fig in the East Village is a great call for a first date — reviewers consistently describe the dim lighting and small-plates format as intimate and romantic. Corner Slice is a fun casual option but it's a counter-service pizza spot, not really date-night material.",
+    "golden_answer": "Tuome in the East Village is a great call for a first date — reviewers consistently describe the dim lighting and small-plates format as intimate and romantic. East Village Pizza is a fun casual option but it's a counter-service pizza spot, not really date-night material.",
     "grading_rubric": {
-      "must_mention": ["Golden Fig", "East Village", "romantic"],
-      "must_not_claim": ["that Corner Slice is romantic or date-appropriate"],
+      "must_mention": ["Tuome", "East Village", "romantic"],
+      "must_not_claim": ["that East Village Pizza is romantic or date-appropriate"],
       "must_cite": true
     },
     "difficulty": "easy",
@@ -128,10 +128,10 @@
       "reviewers describe it as loud or lively",
       "reviewers describe it as good for groups or celebrations"
     ],
-    "golden_answer": "Taverna Blue in Astoria is exactly this energy — reviewers describe it as loud and lively, with live music on Friday and Saturday nights, and it's a favorite for group celebrations. Mezze House and Kebab Corner are both good Astoria options but reviewers describe them as quieter and more low-key, not birthday-party territory.",
+    "golden_answer": "Amylos Taverna in Astoria is exactly this energy — reviewers describe it as loud and lively, with live music on Friday and Saturday nights, and it's a favorite for group celebrations. Aliada and Balkh Shish Kabab House are both good Astoria options but reviewers describe them as quieter and more low-key, not birthday-party territory.",
     "grading_rubric": {
-      "must_mention": ["Taverna Blue", "Astoria", "live music"],
-      "must_not_claim": ["that Mezze House or Kebab Corner are loud or party-oriented"],
+      "must_mention": ["Amylos Taverna", "Astoria", "live music"],
+      "must_not_claim": ["that Aliada or Balkh Shish Kabab House are loud or party-oriented"],
       "must_cite": true
     },
     "difficulty": "medium",
@@ -151,14 +151,14 @@
       "reviewers use language like 'hidden gem' or 'local favorite'",
       "reviewers do not describe it as touristy or well-known"
     ],
-    "golden_answer": "Noodle King in Flushing comes up again and again in reviews as a hidden gem — reviewers specifically call out that it feels like a local secret, not a tourist stop. Dumpling House gets some similar 'hidden gem' mentions too, though less consistently. Seoul Plate, by contrast, shows up in reviews as a well-known, frequently-recommended spot, which is the opposite of what you're after.",
+    "golden_answer": "Lanzhou Hand Pulled Noodles in Flushing comes up again and again in reviews as a hidden gem — reviewers specifically call out that it feels like a local secret, not a tourist stop. Tian Jin Dumpling House gets some similar 'hidden gem' mentions too, though less consistently. Picnic Garden, by contrast, shows up in reviews as a well-known, frequently-recommended spot, which is the opposite of what you're after.",
     "grading_rubric": {
-      "must_mention": ["Noodle King", "Flushing", "hidden gem"],
-      "must_not_claim": ["that Seoul Plate is a hidden gem or under-the-radar"],
+      "must_mention": ["Lanzhou Hand Pulled Noodles", "Flushing", "hidden gem"],
+      "must_not_claim": ["that Picnic Garden is a hidden gem or under-the-radar"],
       "must_cite": true
     },
     "difficulty": "hard",
-    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Dumpling House) that should be acceptable but not required — tests calibrated precision rather than a binary right/wrong match."
+    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Tian Jin Dumpling House) that should be acceptable but not required — tests calibrated precision rather than a binary right/wrong match."
   },
   {
     "id": "G08",
@@ -174,10 +174,10 @@
       "price tier 1 (cheap)",
       "reviewers mention it's good for solo dining or eating alone"
     ],
-    "golden_answer": "Noodle King in Flushing checks both boxes — it's price tier 1, so genuinely cheap, and reviewers specifically call out the counter seating as great for eating solo. Jade Garden is in a similar price range but reviewers describe it as family-style, better suited to groups than solo diners.",
+    "golden_answer": "Lanzhou Hand Pulled Noodles in Flushing checks both boxes — it's price tier 1, so genuinely cheap, and reviewers specifically call out the counter seating as great for eating solo. Asian Jewels is in a similar price range but reviewers describe it as family-style, better suited to groups than solo diners.",
     "grading_rubric": {
-      "must_mention": ["Noodle King", "Flushing", "solo"],
-      "must_not_claim": ["that Jade Garden is good for solo dining"],
+      "must_mention": ["Lanzhou Hand Pulled Noodles", "Flushing", "solo"],
+      "must_not_claim": ["that Asian Jewels is good for solo dining"],
       "must_cite": true
     },
     "difficulty": "easy",
@@ -198,10 +198,10 @@
       "price tier 2 (affordable)",
       "reviewers specifically praise the service"
     ],
-    "golden_answer": "Sweet Home Kitchen in Harlem is the one — it's soul food at a moderate, affordable price tier, and reviewers consistently single out the service as a highlight. Uptown Grill is a tier pricier and doesn't have the same service praise, and Corner Biscuit is affordable but it's a breakfast-only spot, not full soul-food service.",
+    "golden_answer": "Manna's Soul Food in Harlem is the one — it's soul food at a moderate, affordable price tier, and reviewers consistently single out the service as a highlight. Londel's is a tier pricier and doesn't have the same service praise, and Harlem Biscuit Company is affordable but it's a breakfast-only spot, not full soul-food service.",
     "grading_rubric": {
-      "must_mention": ["Sweet Home Kitchen", "Harlem", "service"],
-      "must_not_claim": ["that Uptown Grill is the affordable option"],
+      "must_mention": ["Manna's Soul Food", "Harlem", "service"],
+      "must_not_claim": ["that Londel's is the affordable option"],
       "must_cite": true
     },
     "difficulty": "medium",
@@ -222,14 +222,14 @@
       "price tier 2 or lower",
       "reviewers do not describe it as trendy or overpriced"
     ],
-    "golden_answer": "Bowl & Bean in Williamsburg is what you want — it's vegetarian-friendly, moderately priced, and reviewers describe it as quiet and unpretentious rather than a scene. Green Table is the more obvious vegan match on paper, but it's a price tier higher and reviewers repeatedly describe it as trendy and see-and-be-seen, which is exactly what you're trying to avoid.",
+    "golden_answer": "Wild Ginger in Williamsburg is what you want — it's vegetarian-friendly, moderately priced, and reviewers describe it as quiet and unpretentious rather than a scene. Reverie is the more obvious vegan match on paper, but it's a price tier higher and reviewers repeatedly describe it as trendy and see-and-be-seen, which is exactly what you're trying to avoid.",
     "grading_rubric": {
-      "must_mention": ["Bowl & Bean", "Williamsburg", "vegan"],
-      "must_not_claim": ["that Green Table is the recommended pick", "that Green Table is affordable or low-key"],
+      "must_mention": ["Wild Ginger", "Williamsburg", "vegan"],
+      "must_not_claim": ["that Reverie is the recommended pick", "that Reverie is affordable or low-key"],
       "must_cite": true
     },
     "difficulty": "hard",
-    "notes": "The forbidden slug (Green Table) is a near-perfect structured match on cuisine + neighborhood, making this a genuine trap. The agent must use the semantic 'not overpriced/trendy' signal to correctly exclude the more obvious candidate."
+    "notes": "The forbidden slug (Reverie) is a near-perfect structured match on cuisine + neighborhood, making this a genuine trap. The agent must use the semantic 'not overpriced/trendy' signal to correctly exclude the more obvious candidate."
   },
   {
     "id": "G11",
@@ -244,36 +244,36 @@
       "located in Astoria",
       "cuisine is Mediterranean",
       "reviewers describe it as quiet or low-key",
-      "distinct from Taverna Blue"
+      "distinct from Amylos Taverna"
     ],
-    "golden_answer": "Mezze House in Astoria is what you're after — it's Mediterranean, and reviewers describe it as quiet and low-key with outdoor seating. That's a different scene from Taverna Blue, the well-known loud Greek spot you're explicitly trying to avoid, which reviewers describe as lively with live music on weekends.",
+    "golden_answer": "Aliada in Astoria is what you're after — it's Mediterranean, and reviewers describe it as quiet and low-key with outdoor seating. That's a different scene from Amylos Taverna, the well-known loud Greek spot you're explicitly trying to avoid, which reviewers describe as lively with live music on weekends.",
     "grading_rubric": {
-      "must_mention": ["Mezze House", "Astoria", "quiet"],
-      "must_not_claim": ["that Taverna Blue is the recommended pick"],
+      "must_mention": ["Aliada", "Astoria", "quiet"],
+      "must_not_claim": ["that Amylos Taverna is the recommended pick"],
       "must_cite": true
     },
     "difficulty": "medium",
-    "notes": "The query names the excluded competitor by description rather than name, requiring the agent to resolve 'the loud greek spot' to Taverna Blue and correctly exclude it rather than accidentally recommend it."
+    "notes": "The query names the excluded competitor by description rather than name, requiring the agent to resolve 'the loud greek spot' to Amylos Taverna and correctly exclude it rather than accidentally recommend it."
   },
   {
     "id": "G12",
     "category": "comparison",
-    "query": "whats cheaper AND better reviewed, sweet home kitchen or uptown grill in harlem",
+    "query": "whats cheaper AND better reviewed, Manna's Soul Food or Londel's in harlem",
     "expected_route": "hybrid",
     "expected_tools": ["filter_restaurants", "search_opinions"],
     "required_restaurant_slugs": ["hl-sweet-home-kitchen", "hl-uptown-grill"],
     "acceptable_restaurant_slugs": [],
     "forbidden_restaurant_slugs": [],
     "required_facts": [
-      "Sweet Home Kitchen is price tier 2",
-      "Uptown Grill is price tier 3",
-      "Sweet Home Kitchen is the cheaper of the two",
-      "reviewers rate Sweet Home Kitchen's service more positively than Uptown Grill's"
+      "Manna's Soul Food is price tier 2",
+      "Londel's is price tier 3",
+      "Manna's Soul Food is the cheaper of the two",
+      "reviewers rate Manna's Soul Food's service more positively than Londel's's"
     ],
-    "golden_answer": "Sweet Home Kitchen wins on both counts. It's price tier 2 versus Uptown Grill's tier 3, so it's the cheaper option, and reviewers consistently rate its service higher — that's actually one of its most-praised traits. Uptown Grill isn't bad, but it doesn't have the same standout service reputation.",
+    "golden_answer": "Manna's Soul Food wins on both counts. It's price tier 2 versus Londel's's tier 3, so it's the cheaper option, and reviewers consistently rate its service higher — that's actually one of its most-praised traits. Londel's isn't bad, but it doesn't have the same standout service reputation.",
     "grading_rubric": {
-      "must_mention": ["Sweet Home Kitchen", "Uptown Grill", "cheaper"],
-      "must_not_claim": ["that Uptown Grill is cheaper than Sweet Home Kitchen"],
+      "must_mention": ["Manna's Soul Food", "Londel's", "cheaper"],
+      "must_not_claim": ["that Londel's is cheaper than Manna's Soul Food"],
       "must_cite": true
     },
     "difficulty": "medium",
@@ -289,19 +289,19 @@
     "acceptable_restaurant_slugs": [],
     "forbidden_restaurant_slugs": ["as-grill-house"],
     "required_facts": [
-      "Seoul Plate is price tier 2",
-      "Charcoal House is price tier 4",
-      "reviewers rate Charcoal House's meat quality higher than Seoul Plate's",
-      "Seoul Plate is the better value option"
+      "Picnic Garden is price tier 2",
+      "San Soo Kap San is price tier 4",
+      "reviewers rate San Soo Kap San's meat quality higher than Picnic Garden's",
+      "Picnic Garden is the better value option"
     ],
-    "golden_answer": "In Flushing, Seoul Plate and Charcoal House are the two Korean BBQ options, and they sit at opposite ends of the spectrum. Seoul Plate is price tier 2 and the clear value pick, while Charcoal House is tier 4 — noticeably pricier, but reviewers do rate its meat quality higher. If price matters more, go Seoul Plate; if quality is the priority, Charcoal House.",
+    "golden_answer": "In Flushing, Picnic Garden and San Soo Kap San are the two Korean BBQ options, and they sit at opposite ends of the spectrum. Picnic Garden is price tier 2 and the clear value pick, while San Soo Kap San is tier 4 — noticeably pricier, but reviewers do rate its meat quality higher. If price matters more, go Picnic Garden; if quality is the priority, San Soo Kap San.",
     "grading_rubric": {
-      "must_mention": ["Seoul Plate", "Charcoal House", "price"],
-      "must_not_claim": ["that Grill House is in Flushing"],
+      "must_mention": ["Picnic Garden", "San Soo Kap San", "price"],
+      "must_not_claim": ["that Prime No. 7 is in Flushing"],
       "must_cite": true
     },
     "difficulty": "medium",
-    "notes": "'The Korean BBQ spots in Flushing' requires correctly resolving to exactly two entities (excluding Grill House, which is Korean BBQ but in Astoria) before comparing them."
+    "notes": "'The Korean BBQ spots in Flushing' requires correctly resolving to exactly two entities (excluding Prime No. 7, which is Korean BBQ but in Astoria) before comparing them."
   },
   {
     "id": "G14",
@@ -313,13 +313,13 @@
     "acceptable_restaurant_slugs": [],
     "forbidden_restaurant_slugs": [],
     "required_facts": [
-      "Taverna Blue is described by reviewers as loud and lively with live music on weekends",
-      "Smoke Yard is described by reviewers as a casual, communal-table hangout",
+      "Amylos Taverna is described by reviewers as loud and lively with live music on weekends",
+      "Fette Sau is described by reviewers as a casual, communal-table hangout",
       "both are described by reviewers as good for groups"
     ],
-    "golden_answer": "Both work well for a group, but the energy is different. Taverna Blue in Astoria is the higher-energy pick — reviewers describe it as loud and lively, with live music on Friday and Saturday nights. Smoke Yard in Williamsburg is more of a relaxed, communal-table hangout vibe. If you want a party atmosphere, go Taverna Blue; if you want easy conversation with a casual crowd, go Smoke Yard.",
+    "golden_answer": "Both work well for a group, but the energy is different. Amylos Taverna in Astoria is the higher-energy pick — reviewers describe it as loud and lively, with live music on Friday and Saturday nights. Fette Sau in Williamsburg is more of a relaxed, communal-table hangout vibe. If you want a party atmosphere, go Amylos Taverna; if you want easy conversation with a casual crowd, go Fette Sau.",
     "grading_rubric": {
-      "must_mention": ["Taverna Blue", "Smoke Yard", "group"],
+      "must_mention": ["Amylos Taverna", "Fette Sau", "group"],
       "must_not_claim": ["that one is objectively better than the other without qualification"],
       "must_cite": true
     },
@@ -329,19 +329,19 @@
   {
     "id": "G15",
     "category": "fact-lookup",
-    "query": "what time does corner biscuit open on saturdays",
+    "query": "what time does Harlem Biscuit Company open on saturdays",
     "expected_route": "sql",
     "expected_tools": ["get_restaurant_details"],
     "required_restaurant_slugs": ["hl-corner-biscuit"],
     "acceptable_restaurant_slugs": [],
     "forbidden_restaurant_slugs": [],
     "required_facts": [
-      "Corner Biscuit opens at 8am on Saturdays",
-      "Corner Biscuit closes at 2pm"
+      "Harlem Biscuit Company opens at 8am on Saturdays",
+      "Harlem Biscuit Company closes at 2pm"
     ],
-    "golden_answer": "Corner Biscuit opens at 8am on Saturdays. Keep in mind it's a breakfast/brunch spot and closes at 2pm, so it's a morning visit only.",
+    "golden_answer": "Harlem Biscuit Company opens at 8am on Saturdays. Keep in mind it's a breakfast/brunch spot and closes at 2pm, so it's a morning visit only.",
     "grading_rubric": {
-      "must_mention": ["Corner Biscuit", "8am"],
+      "must_mention": ["Harlem Biscuit Company", "8am"],
       "must_not_claim": ["a different opening time"],
       "must_cite": true
     },
@@ -351,7 +351,7 @@
   {
     "id": "G16",
     "category": "fact-lookup",
-    "query": "does seoul plate take reservations",
+    "query": "does Picnic Garden take reservations",
     "expected_route": "sql",
     "expected_tools": ["get_restaurant_details"],
     "required_restaurant_slugs": ["fl-seoul-plate"],
@@ -360,9 +360,9 @@
     "required_facts": [
       "reservation policy is not available in the dataset"
     ],
-    "golden_answer": "I don't have reservation policy info for Seoul Plate in the dataset, so I can't say for sure either way. I'd recommend calling them directly or checking their listing before you head over — what I can tell you is it's Korean BBQ in Flushing, price tier 2, with several entrees under $20.",
+    "golden_answer": "I don't have reservation policy info for Picnic Garden in the dataset, so I can't say for sure either way. I'd recommend calling them directly or checking their listing before you head over — what I can tell you is it's Korean BBQ in Flushing, price tier 2, with several entrees under $20.",
     "grading_rubric": {
-      "must_mention": ["Seoul Plate", "don't have", "reservation"],
+      "must_mention": ["Picnic Garden", "don't have", "reservation"],
       "must_not_claim": ["that it does take reservations", "that it does not take reservations"],
       "must_cite": true
     },
@@ -372,7 +372,7 @@
   {
     "id": "G17",
     "category": "fact-lookup",
-    "query": "hows the parking situation at green table in williamsburg",
+    "query": "hows the parking situation at Reverie in williamsburg",
     "expected_route": "sql",
     "expected_tools": ["get_restaurant_details"],
     "required_restaurant_slugs": ["wb-green-table"],
@@ -381,9 +381,9 @@
     "required_facts": [
       "parking information is not available in the dataset"
     ],
-    "golden_answer": "I don't have parking details for Green Table in the dataset — that's not something we track. It's in Williamsburg, so street parking is likely your best bet, but I'd double check locally or look it up directly before you go.",
+    "golden_answer": "I don't have parking details for Reverie in the dataset — that's not something we track. It's in Williamsburg, so street parking is likely your best bet, but I'd double check locally or look it up directly before you go.",
     "grading_rubric": {
-      "must_mention": ["Green Table", "don't have", "parking"],
+      "must_mention": ["Reverie", "don't have", "parking"],
       "must_not_claim": ["specific parking availability, lot size, or cost"],
       "must_cite": true
     },
@@ -402,7 +402,7 @@
     "required_facts": [
       "the system cannot make reservations or bookings"
     ],
-    "golden_answer": "I can't actually book a table — I don't have that capability. What I can do is point you toward some East Village options for tonight: Golden Fig for something more intimate, Ramen Den if you want something casual, or Kimchi House for Korean BBQ. You'd need to call or book directly with whichever one you pick.",
+    "golden_answer": "I can't actually book a table — I don't have that capability. What I can do is point you toward some East Village options for tonight: Tuome for something more intimate, Momofuku Noodle Bar if you want something casual, or Gen Korean BBQ House for Korean BBQ. You'd need to call or book directly with whichever one you pick.",
     "grading_rubric": {
       "must_mention": ["can't book", "East Village"],
       "must_not_claim": ["that a reservation was made or confirmed"],
@@ -423,7 +423,7 @@
     "required_facts": [
       "the dataset only covers NYC neighborhoods (East Village, Flushing, Williamsburg, Harlem, Astoria)"
     ],
-    "golden_answer": "I can only speak to NYC — specifically East Village, Flushing, Williamsburg, Harlem, and Astoria — so I can't recommend anything in Tokyo. If you want a ramen fix closer to home, Ramen Den in the East Village is a solid pick with counter seating and good reviews.",
+    "golden_answer": "I can only speak to NYC — specifically East Village, Flushing, Williamsburg, Harlem, and Astoria — so I can't recommend anything in Tokyo. If you want a ramen fix closer to home, Momofuku Noodle Bar in the East Village is a solid pick with counter seating and good reviews.",
     "grading_rubric": {
       "must_mention": ["NYC", "can't", "Tokyo"],
       "must_not_claim": ["a specific Tokyo restaurant recommendation"],
@@ -435,7 +435,7 @@
   {
     "id": "G20",
     "category": "unanswerable",
-    "query": "hows the wait time right now at smoke yard",
+    "query": "hows the wait time right now at Fette Sau",
     "expected_route": "refuse",
     "expected_tools": ["get_restaurant_details"],
     "required_restaurant_slugs": ["wb-smoke-yard"],
@@ -444,9 +444,9 @@
     "required_facts": [
       "the dataset does not contain real-time wait time information"
     ],
-    "golden_answer": "I can't check real-time wait times for Smoke Yard — that's not data I have access to. What I can tell you is it's a BBQ spot in Williamsburg with communal seating, closing at 11pm, popular for groups, so weekend evenings are probably your busiest window. I'd call ahead or check in person for the current wait.",
+    "golden_answer": "I can't check real-time wait times for Fette Sau — that's not data I have access to. What I can tell you is it's a BBQ spot in Williamsburg with communal seating, closing at 11pm, popular for groups, so weekend evenings are probably your busiest window. I'd call ahead or check in person for the current wait.",
     "grading_rubric": {
-      "must_mention": ["Smoke Yard", "can't", "wait time"],
+      "must_mention": ["Fette Sau", "can't", "wait time"],
       "must_not_claim": ["a specific current wait time or number of minutes"],
       "must_cite": true
     },
