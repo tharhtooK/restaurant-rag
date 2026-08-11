@@ -1,0 +1,67 @@
+/**
+ * Steps 8-9: chunk + embed + upsert.
+ *
+ * Chunking is a no-op at the current data size: review snippets are 1-3
+ * sentences, so each review is already an appropriately-sized chunk. If review
+ * text ever grows to full paragraphs, split here before embedding.
+ *
+ * Vector IDs are the Review primary key, so re-running this script overwrites
+ * rather than duplicating.
+ *
+ * Usage: docker compose exec web npx tsx scripts/ingest/embed-upsert.ts
+ */
+import "dotenv/config";
+import { PrismaClient } from "../../src/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { embed, getPineconeIndex, type ReviewVectorMetadata } from "../../src/lib/pinecone";
+
+const BATCH_SIZE = 50;
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
+
+async function main() {
+  const reviews = await prisma.review.findMany({ include: { restaurant: true } });
+  console.log(`found ${reviews.length} reviews to embed`);
+
+  if (reviews.length === 0) {
+    console.log("nothing to do - did you run `prisma db seed`?");
+    return;
+  }
+
+  const index = getPineconeIndex();
+  let upserted = 0;
+
+  for (let i = 0; i < reviews.length; i += BATCH_SIZE) {
+    const batch = reviews.slice(i, i + BATCH_SIZE);
+    const vectors = await embed(batch.map((r) => r.content));
+
+    await index.upsert({
+      records: batch.map((review, n) => ({
+        id: review.id,
+        values: vectors[n],
+        metadata: {
+          restaurantSlug: review.restaurant.slug,
+          restaurantName: review.restaurant.name,
+          neighborhood: review.restaurant.neighborhood,
+          source: review.source,
+          content: review.content,
+        } satisfies ReviewVectorMetadata,
+      })),
+    });
+
+    upserted += batch.length;
+    console.log(`upserted ${upserted}/${reviews.length}`);
+  }
+
+  const stats = await index.describeIndexStats();
+  console.log(`done. index now reports ${stats.totalRecordCount} records`);
+}
+
+main()
+  .then(() => prisma.$disconnect())
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
+  });

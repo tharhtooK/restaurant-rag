@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { embedOne, getPineconeIndex } from "@/lib/pinecone";
 
 export type SearchOpinionsInput = {
   /** Free-text query describing the vibe/experience/sentiment to search for. */
@@ -15,62 +15,42 @@ export type OpinionMatch = {
   restaurantName: string;
   neighborhood: string;
   snippet: string;
-  rank: number;
+  score: number;
 };
 
 /**
- * Stand-in for semantic/vector search: Postgres full-text search (to_tsvector /
- * plainto_tsquery) over review content. No embeddings or Pinecone in this phase.
+ * Semantic search over review chunks stored in Pinecone (embedded by
+ * scripts/ingest/embed-upsert.ts). Structured constraints are applied as
+ * Pinecone metadata filters so they compose with the vector search rather than
+ * being applied after top-K truncation.
  */
-function toOrTsQuery(query: string): string {
-  const words = query
-    .toLowerCase()
-    .match(/[a-z0-9]+/g)
-    ?.filter((w) => w.length > 1);
-  if (!words || words.length === 0) return "";
-  // OR the terms together: plainto_tsquery ANDs every word, which is too
-  // strict for a multi-concept query like "romantic quiet date night spot" -
-  // this is a stand-in for semantic recall, so favor recall over precision
-  // and let ts_rank do the ordering.
-  return words.map((w) => `${w}:*`).join(" | ");
-}
-
 export async function searchOpinions(input: SearchOpinionsInput): Promise<OpinionMatch[]> {
-  const limit = input.limit ?? 5;
-  const tsQuery = toOrTsQuery(input.query);
-  if (!tsQuery) return [];
+  const topK = input.limit ?? 5;
 
-  const neighborhoodClause = input.neighborhood ? `AND r."neighborhood" = $2` : "";
-  const slugsClause = input.restaurantSlugs?.length
-    ? `AND r."slug" = ANY($${input.neighborhood ? 3 : 2})`
-    : "";
+  const filters: Record<string, unknown>[] = [];
+  if (input.neighborhood) filters.push({ neighborhood: { $eq: input.neighborhood } });
+  if (input.restaurantSlugs?.length) {
+    filters.push({ restaurantSlug: { $in: input.restaurantSlugs } });
+  }
 
-  const params: unknown[] = [tsQuery];
-  if (input.neighborhood) params.push(input.neighborhood);
-  if (input.restaurantSlugs?.length) params.push(input.restaurantSlugs);
+  const vector = await embedOne(input.query);
 
-  const rows = await prisma.$queryRawUnsafe<
-    { slug: string; name: string; neighborhood: string; content: string; rank: number }[]
-  >(
-    `
-    SELECT r."slug", r."name", r."neighborhood", rev."content",
-           ts_rank(to_tsvector('english', rev."content"), to_tsquery('english', $1)) AS rank
-    FROM "Review" rev
-    JOIN "Restaurant" r ON r."id" = rev."restaurantId"
-    WHERE to_tsvector('english', rev."content") @@ to_tsquery('english', $1)
-    ${neighborhoodClause}
-    ${slugsClause}
-    ORDER BY rank DESC
-    LIMIT ${limit}
-    `,
-    ...params,
-  );
+  const response = await getPineconeIndex().query({
+    vector,
+    topK,
+    includeMetadata: true,
+    ...(filters.length === 1
+      ? { filter: filters[0] }
+      : filters.length > 1
+        ? { filter: { $and: filters } }
+        : {}),
+  });
 
-  return rows.map((r) => ({
-    restaurantSlug: r.slug,
-    restaurantName: r.name,
-    neighborhood: r.neighborhood,
-    snippet: r.content,
-    rank: r.rank,
+  return (response.matches ?? []).map((match) => ({
+    restaurantSlug: match.metadata?.restaurantSlug ?? "",
+    restaurantName: match.metadata?.restaurantName ?? "",
+    neighborhood: match.metadata?.neighborhood ?? "",
+    snippet: match.metadata?.content ?? "",
+    score: match.score ?? 0,
   }));
 }
