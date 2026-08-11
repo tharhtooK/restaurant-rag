@@ -1,0 +1,456 @@
+[
+  {
+    "id": "G01",
+    "category": "sql-filter",
+    "query": "cheap korean bbq in flushing under $20 a plate",
+    "expected_route": "sql",
+    "expected_tools": ["filter_restaurants"],
+    "required_restaurant_slugs": ["fl-seoul-plate"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["as-grill-house", "ev-kimchi-house"],
+    "required_facts": [
+      "located in Flushing",
+      "cuisine is Korean BBQ",
+      "has at least one entree under $20"
+    ],
+    "golden_answer": "Seoul Plate in Flushing is your best bet — it's Korean BBQ with several entrees under $20, which is unusually affordable for the category. Most Korean BBQ spots run pricier, but Seoul Plate is specifically known for keeping it accessible without skimping on quality.",
+    "grading_rubric": {
+      "must_mention": ["Seoul Plate", "Flushing", "under $20"],
+      "must_not_claim": ["that it's located in Astoria or East Village", "that entrees start above $20"],
+      "must_cite": true
+    },
+    "difficulty": "easy",
+    "notes": "Baseline structured filter joining cuisine + neighborhood + price. Distractors (as-grill-house, ev-kimchi-house) share cuisine but fail on neighborhood/price, testing that the agent doesn't over-match on cuisine alone."
+  },
+  {
+    "id": "G02",
+    "category": "sql-filter",
+    "query": "restaurants in williamsburg open after 11pm",
+    "expected_route": "sql",
+    "expected_tools": ["filter_restaurants"],
+    "required_restaurant_slugs": ["wb-nightowl-diner"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["wb-smoke-yard", "wb-green-table", "wb-bowl-and-bean"],
+    "required_facts": [
+      "located in Williamsburg",
+      "open past 11pm",
+      "open until 4am Thursday through Saturday"
+    ],
+    "golden_answer": "Nightowl Diner in Williamsburg is open until 4am Thursday through Saturday (1am the rest of the week), making it the clear late-night option. The other nearby spots — Smoke Yard, Green Table, and Bowl & Bean — all close at or before 11pm, so they won't work for a late-night visit.",
+    "grading_rubric": {
+      "must_mention": ["Nightowl Diner", "Williamsburg", "4am"],
+      "must_not_claim": ["that Smoke Yard or Green Table are open past 11pm"],
+      "must_cite": true
+    },
+    "difficulty": "easy",
+    "notes": "Tests a strict boundary condition — Smoke Yard closes at exactly 11pm, which should NOT satisfy 'after 11pm.' Off-by-one boundary handling."
+  },
+  {
+    "id": "G03",
+    "category": "sql-filter",
+    "query": "any spots in astoria that do vegetarian, price wise nothing too fancy",
+    "expected_route": "sql",
+    "expected_tools": ["filter_restaurants"],
+    "required_restaurant_slugs": ["as-mezze-house"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["as-taverna-blue", "as-kebab-corner"],
+    "required_facts": [
+      "located in Astoria",
+      "tagged as vegetarian-friendly",
+      "price tier 2 (moderate, not high-end)"
+    ],
+    "golden_answer": "Mezze House in Astoria fits — it's tagged vegetarian-friendly and sits at a moderate price tier, nothing high-end. Taverna Blue is pricier and leans more into meat-forward Greek dishes, and Kebab Corner isn't tagged for vegetarian options, so neither is a great fit here.",
+    "grading_rubric": {
+      "must_mention": ["Mezze House", "Astoria", "vegetarian"],
+      "must_not_claim": ["that Taverna Blue is a budget option"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "Casual phrasing ('nothing too fancy') has to be mapped to a price-tier constraint (tier 2 or below), not a literal keyword match. Joins a dietary-tag filter with a fuzzy-but-structured price constraint."
+  },
+  {
+    "id": "G04",
+    "category": "sql-filter",
+    "query": "wat harlem places open for breakfast b4 9am",
+    "expected_route": "sql",
+    "expected_tools": ["filter_restaurants"],
+    "required_restaurant_slugs": ["hl-corner-biscuit"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["hl-uptown-grill", "hl-sweet-home-kitchen"],
+    "required_facts": [
+      "located in Harlem",
+      "serves breakfast",
+      "opens at 8am"
+    ],
+    "golden_answer": "Corner Biscuit in Harlem opens at 8am and is breakfast/brunch-focused, so it's your spot. Sweet Home Kitchen doesn't open until 11am and Uptown Grill doesn't open until 5pm for dinner, so neither serves breakfast before 9am.",
+    "grading_rubric": {
+      "must_mention": ["Corner Biscuit", "Harlem", "8am"],
+      "must_not_claim": ["that Sweet Home Kitchen or Uptown Grill serve breakfast before 9am"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "Typo-heavy query ('wat', 'b4') testing normalization before filtering. Two Harlem restaurants that are superficially plausible but fail on hours form the forbidden set."
+  },
+  {
+    "id": "G05",
+    "category": "vector-vibe",
+    "query": "somewhere cozy and romantic for a first date in the east village",
+    "expected_route": "vector",
+    "expected_tools": ["search_opinions"],
+    "required_restaurant_slugs": ["ev-golden-fig"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["ev-corner-slice"],
+    "required_facts": [
+      "located in East Village",
+      "reviewers describe it as romantic or intimate",
+      "dim lighting or small-plates format mentioned in reviews"
+    ],
+    "golden_answer": "Golden Fig in the East Village is a great call for a first date — reviewers consistently describe the dim lighting and small-plates format as intimate and romantic. Corner Slice is a fun casual option but it's a counter-service pizza spot, not really date-night material.",
+    "grading_rubric": {
+      "must_mention": ["Golden Fig", "East Village", "romantic"],
+      "must_not_claim": ["that Corner Slice is romantic or date-appropriate"],
+      "must_cite": true
+    },
+    "difficulty": "easy",
+    "notes": "Pure semantic retrieval — 'cozy and romantic' has no structured column and only exists in review language."
+  },
+  {
+    "id": "G06",
+    "category": "vector-vibe",
+    "query": "need a spot in astoria thats LOUD and fun for a bday party lol",
+    "expected_route": "vector",
+    "expected_tools": ["search_opinions"],
+    "required_restaurant_slugs": ["as-taverna-blue"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["as-mezze-house", "as-kebab-corner"],
+    "required_facts": [
+      "located in Astoria",
+      "reviewers describe it as loud or lively",
+      "reviewers describe it as good for groups or celebrations"
+    ],
+    "golden_answer": "Taverna Blue in Astoria is exactly this energy — reviewers describe it as loud and lively, with live music on Friday and Saturday nights, and it's a favorite for group celebrations. Mezze House and Kebab Corner are both good Astoria options but reviewers describe them as quieter and more low-key, not birthday-party territory.",
+    "grading_rubric": {
+      "must_mention": ["Taverna Blue", "Astoria", "live music"],
+      "must_not_claim": ["that Mezze House or Kebab Corner are loud or party-oriented"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "Slang-heavy query ('bday', 'lol', all-caps 'LOUD') testing normalization. Tests that the agent doesn't over-index on 'party' as a structured feature and instead pulls from review sentiment."
+  },
+  {
+    "id": "G07",
+    "category": "vector-vibe",
+    "query": "which flushing restaurant feels the most like a hidden gem, not touristy at all",
+    "expected_route": "vector",
+    "expected_tools": ["search_opinions"],
+    "required_restaurant_slugs": ["fl-noodle-king"],
+    "acceptable_restaurant_slugs": ["fl-dumpling-house"],
+    "forbidden_restaurant_slugs": ["fl-seoul-plate"],
+    "required_facts": [
+      "located in Flushing",
+      "reviewers use language like 'hidden gem' or 'local favorite'",
+      "reviewers do not describe it as touristy or well-known"
+    ],
+    "golden_answer": "Noodle King in Flushing comes up again and again in reviews as a hidden gem — reviewers specifically call out that it feels like a local secret, not a tourist stop. Dumpling House gets some similar 'hidden gem' mentions too, though less consistently. Seoul Plate, by contrast, shows up in reviews as a well-known, frequently-recommended spot, which is the opposite of what you're after.",
+    "grading_rubric": {
+      "must_mention": ["Noodle King", "Flushing", "hidden gem"],
+      "must_not_claim": ["that Seoul Plate is a hidden gem or under-the-radar"],
+      "must_cite": true
+    },
+    "difficulty": "hard",
+    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Dumpling House) that should be acceptable but not required — tests calibrated precision rather than a binary right/wrong match."
+  },
+  {
+    "id": "G08",
+    "category": "hybrid-filter",
+    "query": "cheap noodle spot in flushing thats good for eating alone",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["fl-noodle-king"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["fl-jade-garden"],
+    "required_facts": [
+      "located in Flushing",
+      "price tier 1 (cheap)",
+      "reviewers mention it's good for solo dining or eating alone"
+    ],
+    "golden_answer": "Noodle King in Flushing checks both boxes — it's price tier 1, so genuinely cheap, and reviewers specifically call out the counter seating as great for eating solo. Jade Garden is in a similar price range but reviewers describe it as family-style, better suited to groups than solo diners.",
+    "grading_rubric": {
+      "must_mention": ["Noodle King", "Flushing", "solo"],
+      "must_not_claim": ["that Jade Garden is good for solo dining"],
+      "must_cite": true
+    },
+    "difficulty": "easy",
+    "notes": "Joins a structured price filter with a semantic 'good for solo dining' signal. Clean single required match with one clear structured-only distractor."
+  },
+  {
+    "id": "G09",
+    "category": "hybrid-filter",
+    "query": "affordable harlem soul food place people say has great service",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["hl-sweet-home-kitchen"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["hl-uptown-grill", "hl-corner-biscuit"],
+    "required_facts": [
+      "located in Harlem",
+      "cuisine is soul food",
+      "price tier 2 (affordable)",
+      "reviewers specifically praise the service"
+    ],
+    "golden_answer": "Sweet Home Kitchen in Harlem is the one — it's soul food at a moderate, affordable price tier, and reviewers consistently single out the service as a highlight. Uptown Grill is a tier pricier and doesn't have the same service praise, and Corner Biscuit is affordable but it's a breakfast-only spot, not full soul-food service.",
+    "grading_rubric": {
+      "must_mention": ["Sweet Home Kitchen", "Harlem", "service"],
+      "must_not_claim": ["that Uptown Grill is the affordable option"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "Joins price tier + cuisine (structured) with review-sentiment praise for service (semantic). Two plausible Harlem distractors, each failing on a different axis."
+  },
+  {
+    "id": "G10",
+    "category": "hybrid-filter",
+    "query": "somewhere in williamsburg for vegan food but not one of those overpriced trendy places",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["wb-bowl-and-bean"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["wb-green-table"],
+    "required_facts": [
+      "located in Williamsburg",
+      "vegetarian/vegan-friendly",
+      "price tier 2 or lower",
+      "reviewers do not describe it as trendy or overpriced"
+    ],
+    "golden_answer": "Bowl & Bean in Williamsburg is what you want — it's vegetarian-friendly, moderately priced, and reviewers describe it as quiet and unpretentious rather than a scene. Green Table is the more obvious vegan match on paper, but it's a price tier higher and reviewers repeatedly describe it as trendy and see-and-be-seen, which is exactly what you're trying to avoid.",
+    "grading_rubric": {
+      "must_mention": ["Bowl & Bean", "Williamsburg", "vegan"],
+      "must_not_claim": ["that Green Table is the recommended pick", "that Green Table is affordable or low-key"],
+      "must_cite": true
+    },
+    "difficulty": "hard",
+    "notes": "The forbidden slug (Green Table) is a near-perfect structured match on cuisine + neighborhood, making this a genuine trap. The agent must use the semantic 'not overpriced/trendy' signal to correctly exclude the more obvious candidate."
+  },
+  {
+    "id": "G11",
+    "category": "hybrid-filter",
+    "query": "quiet mediterranean place in astoria, not the loud greek spot everyone talks about",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["as-mezze-house"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["as-taverna-blue"],
+    "required_facts": [
+      "located in Astoria",
+      "cuisine is Mediterranean",
+      "reviewers describe it as quiet or low-key",
+      "distinct from Taverna Blue"
+    ],
+    "golden_answer": "Mezze House in Astoria is what you're after — it's Mediterranean, and reviewers describe it as quiet and low-key with outdoor seating. That's a different scene from Taverna Blue, the well-known loud Greek spot you're explicitly trying to avoid, which reviewers describe as lively with live music on weekends.",
+    "grading_rubric": {
+      "must_mention": ["Mezze House", "Astoria", "quiet"],
+      "must_not_claim": ["that Taverna Blue is the recommended pick"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "The query names the excluded competitor by description rather than name, requiring the agent to resolve 'the loud greek spot' to Taverna Blue and correctly exclude it rather than accidentally recommend it."
+  },
+  {
+    "id": "G12",
+    "category": "comparison",
+    "query": "whats cheaper AND better reviewed, sweet home kitchen or uptown grill in harlem",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["hl-sweet-home-kitchen", "hl-uptown-grill"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "Sweet Home Kitchen is price tier 2",
+      "Uptown Grill is price tier 3",
+      "Sweet Home Kitchen is the cheaper of the two",
+      "reviewers rate Sweet Home Kitchen's service more positively than Uptown Grill's"
+    ],
+    "golden_answer": "Sweet Home Kitchen wins on both counts. It's price tier 2 versus Uptown Grill's tier 3, so it's the cheaper option, and reviewers consistently rate its service higher — that's actually one of its most-praised traits. Uptown Grill isn't bad, but it doesn't have the same standout service reputation.",
+    "grading_rubric": {
+      "must_mention": ["Sweet Home Kitchen", "Uptown Grill", "cheaper"],
+      "must_not_claim": ["that Uptown Grill is cheaper than Sweet Home Kitchen"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "Both entities required — tests that the agent retrieves and reports on two restaurants rather than answering about only one. Combines a structured price comparison with a semantic service-quality comparison."
+  },
+  {
+    "id": "G13",
+    "category": "comparison",
+    "query": "compare the korean bbq spots in flushing on price vs quality",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["fl-seoul-plate", "fl-charcoal-house"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": ["as-grill-house"],
+    "required_facts": [
+      "Seoul Plate is price tier 2",
+      "Charcoal House is price tier 4",
+      "reviewers rate Charcoal House's meat quality higher than Seoul Plate's",
+      "Seoul Plate is the better value option"
+    ],
+    "golden_answer": "In Flushing, Seoul Plate and Charcoal House are the two Korean BBQ options, and they sit at opposite ends of the spectrum. Seoul Plate is price tier 2 and the clear value pick, while Charcoal House is tier 4 — noticeably pricier, but reviewers do rate its meat quality higher. If price matters more, go Seoul Plate; if quality is the priority, Charcoal House.",
+    "grading_rubric": {
+      "must_mention": ["Seoul Plate", "Charcoal House", "price"],
+      "must_not_claim": ["that Grill House is in Flushing"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "'The Korean BBQ spots in Flushing' requires correctly resolving to exactly two entities (excluding Grill House, which is Korean BBQ but in Astoria) before comparing them."
+  },
+  {
+    "id": "G14",
+    "category": "comparison",
+    "query": "which is a better vibe for a big group, the greek place in astoria or the bbq spot in williamsburg",
+    "expected_route": "hybrid",
+    "expected_tools": ["filter_restaurants", "search_opinions"],
+    "required_restaurant_slugs": ["as-taverna-blue", "wb-smoke-yard"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "Taverna Blue is described by reviewers as loud and lively with live music on weekends",
+      "Smoke Yard is described by reviewers as a casual, communal-table hangout",
+      "both are described by reviewers as good for groups"
+    ],
+    "golden_answer": "Both work well for a group, but the energy is different. Taverna Blue in Astoria is the higher-energy pick — reviewers describe it as loud and lively, with live music on Friday and Saturday nights. Smoke Yard in Williamsburg is more of a relaxed, communal-table hangout vibe. If you want a party atmosphere, go Taverna Blue; if you want easy conversation with a casual crowd, go Smoke Yard.",
+    "grading_rubric": {
+      "must_mention": ["Taverna Blue", "Smoke Yard", "group"],
+      "must_not_claim": ["that one is objectively better than the other without qualification"],
+      "must_cite": true
+    },
+    "difficulty": "hard",
+    "notes": "No structured tiebreaker exists — both restaurants are legitimately good for groups, so a good answer has to characterize the difference rather than declare a winner. Also requires resolving two anonymous descriptions ('the greek place', 'the bbq spot') to specific entities across two different neighborhoods."
+  },
+  {
+    "id": "G15",
+    "category": "fact-lookup",
+    "query": "what time does corner biscuit open on saturdays",
+    "expected_route": "sql",
+    "expected_tools": ["get_restaurant_details"],
+    "required_restaurant_slugs": ["hl-corner-biscuit"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "Corner Biscuit opens at 8am on Saturdays",
+      "Corner Biscuit closes at 2pm"
+    ],
+    "golden_answer": "Corner Biscuit opens at 8am on Saturdays. Keep in mind it's a breakfast/brunch spot and closes at 2pm, so it's a morning visit only.",
+    "grading_rubric": {
+      "must_mention": ["Corner Biscuit", "8am"],
+      "must_not_claim": ["a different opening time"],
+      "must_cite": true
+    },
+    "difficulty": "easy",
+    "notes": "Single-entity, single-fact lookup — the simplest possible grounding test."
+  },
+  {
+    "id": "G16",
+    "category": "fact-lookup",
+    "query": "does seoul plate take reservations",
+    "expected_route": "sql",
+    "expected_tools": ["get_restaurant_details"],
+    "required_restaurant_slugs": ["fl-seoul-plate"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "reservation policy is not available in the dataset"
+    ],
+    "golden_answer": "I don't have reservation policy info for Seoul Plate in the dataset, so I can't say for sure either way. I'd recommend calling them directly or checking their listing before you head over — what I can tell you is it's Korean BBQ in Flushing, price tier 2, with several entrees under $20.",
+    "grading_rubric": {
+      "must_mention": ["Seoul Plate", "don't have", "reservation"],
+      "must_not_claim": ["that it does take reservations", "that it does not take reservations"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "The fact genuinely doesn't exist in the dataset. Correct behavior is an explicit 'unknown' rather than a confident guess in either direction — this is the core hallucination trap for this category."
+  },
+  {
+    "id": "G17",
+    "category": "fact-lookup",
+    "query": "hows the parking situation at green table in williamsburg",
+    "expected_route": "sql",
+    "expected_tools": ["get_restaurant_details"],
+    "required_restaurant_slugs": ["wb-green-table"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "parking information is not available in the dataset"
+    ],
+    "golden_answer": "I don't have parking details for Green Table in the dataset — that's not something we track. It's in Williamsburg, so street parking is likely your best bet, but I'd double check locally or look it up directly before you go.",
+    "grading_rubric": {
+      "must_mention": ["Green Table", "don't have", "parking"],
+      "must_not_claim": ["specific parking availability, lot size, or cost"],
+      "must_cite": true
+    },
+    "difficulty": "hard",
+    "notes": "Harder than G16 because 'parking' is a plausible-sounding fact type that invites confident-sounding fabrication (e.g., inventing a lot or validation program) rather than an honest 'unknown.'"
+  },
+  {
+    "id": "G18",
+    "category": "unanswerable",
+    "query": "book me a table for 4 tonight at 7pm somewhere in the east village",
+    "expected_route": "refuse",
+    "expected_tools": ["filter_restaurants"],
+    "required_restaurant_slugs": [],
+    "acceptable_restaurant_slugs": ["ev-ramen-den", "ev-golden-fig", "ev-corner-slice", "ev-kimchi-house"],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "the system cannot make reservations or bookings"
+    ],
+    "golden_answer": "I can't actually book a table — I don't have that capability. What I can do is point you toward some East Village options for tonight: Golden Fig for something more intimate, Ramen Den if you want something casual, or Kimchi House for Korean BBQ. You'd need to call or book directly with whichever one you pick.",
+    "grading_rubric": {
+      "must_mention": ["can't book", "East Village"],
+      "must_not_claim": ["that a reservation was made or confirmed"],
+      "must_cite": true
+    },
+    "difficulty": "easy",
+    "notes": "Transactional request the system structurally cannot fulfill. A good refusal here still redirects usefully with real restaurant suggestions rather than a bare 'I can't help with that.'"
+  },
+  {
+    "id": "G19",
+    "category": "unanswerable",
+    "query": "whats the best ramen shop in tokyo",
+    "expected_route": "refuse",
+    "expected_tools": ["filter_restaurants"],
+    "required_restaurant_slugs": [],
+    "acceptable_restaurant_slugs": ["ev-ramen-den"],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "the dataset only covers NYC neighborhoods (East Village, Flushing, Williamsburg, Harlem, Astoria)"
+    ],
+    "golden_answer": "I can only speak to NYC — specifically East Village, Flushing, Williamsburg, Harlem, and Astoria — so I can't recommend anything in Tokyo. If you want a ramen fix closer to home, Ramen Den in the East Village is a solid pick with counter seating and good reviews.",
+    "grading_rubric": {
+      "must_mention": ["NYC", "can't", "Tokyo"],
+      "must_not_claim": ["a specific Tokyo restaurant recommendation"],
+      "must_cite": true
+    },
+    "difficulty": "medium",
+    "notes": "Out-of-scope-city request. Tests that the agent states scope clearly rather than attempting to answer from general knowledge, while still redirecting usefully within scope."
+  },
+  {
+    "id": "G20",
+    "category": "unanswerable",
+    "query": "hows the wait time right now at smoke yard",
+    "expected_route": "refuse",
+    "expected_tools": ["get_restaurant_details"],
+    "required_restaurant_slugs": ["wb-smoke-yard"],
+    "acceptable_restaurant_slugs": [],
+    "forbidden_restaurant_slugs": [],
+    "required_facts": [
+      "the dataset does not contain real-time wait time information"
+    ],
+    "golden_answer": "I can't check real-time wait times for Smoke Yard — that's not data I have access to. What I can tell you is it's a BBQ spot in Williamsburg with communal seating, closing at 11pm, popular for groups, so weekend evenings are probably your busiest window. I'd call ahead or check in person for the current wait.",
+    "grading_rubric": {
+      "must_mention": ["Smoke Yard", "can't", "wait time"],
+      "must_not_claim": ["a specific current wait time or number of minutes"],
+      "must_cite": true
+    },
+    "difficulty": "hard",
+    "notes": "The hardest refusal case — 'wait time' sounds like a reasonable question about an existing, named entity, which tempts a system into fabricating a plausible-sounding estimate rather than declining. Tests refusal on a per-fact basis rather than a whole-query basis."
+  }
+]
