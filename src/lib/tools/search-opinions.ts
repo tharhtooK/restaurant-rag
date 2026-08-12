@@ -35,7 +35,13 @@ export async function searchOpinions(input: SearchOpinionsInput): Promise<Opinio
 
   const vector = await embedOne(input.query);
 
-  const response = await getPineconeIndex().query({
+  // PINECONE_NAMESPACE lets the eval point retrieval at an isolated corpus
+  // (e.g. only independently-sourced reviews). Unset = the default namespace.
+  const base = getPineconeIndex();
+  const ns = process.env.PINECONE_NAMESPACE;
+  const index = ns ? base.namespace(ns) : base;
+
+  const response = await index.query({
     vector,
     topK,
     includeMetadata: true,

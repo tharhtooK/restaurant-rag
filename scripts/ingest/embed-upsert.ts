@@ -8,7 +8,13 @@
  * Vector IDs are the Review primary key, so re-running this script overwrites
  * rather than duplicating.
  *
- * Usage: docker compose exec web npx tsx scripts/ingest/embed-upsert.ts
+ * Usage:
+ *   npx tsx scripts/ingest/embed-upsert.ts                     # all reviews -> default namespace
+ *   npx tsx scripts/ingest/embed-upsert.ts web-research        # only independently-sourced
+ *
+ * Passing a source writes into a Pinecone namespace of the same name, so the
+ * authored and independent corpora stay isolated and can be evaluated
+ * separately. See prisma/seed-data-independent.ts for why that matters.
  */
 import "dotenv/config";
 import { PrismaClient } from "../../src/generated/prisma/client";
@@ -21,7 +27,14 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const reviews = await prisma.review.findMany({ include: { restaurant: true } });
+  const source = process.argv[2];
+  const namespace = source || undefined;
+
+  const reviews = await prisma.review.findMany({
+    where: source ? { source } : undefined,
+    include: { restaurant: true },
+  });
+  if (source) console.log(`filtering to source="${source}" -> namespace "${namespace}"`);
   console.log(`found ${reviews.length} reviews to embed`);
 
   if (reviews.length === 0) {
@@ -29,7 +42,8 @@ async function main() {
     return;
   }
 
-  const index = getPineconeIndex();
+  const base = getPineconeIndex();
+  const index = namespace ? base.namespace(namespace) : base;
   let upserted = 0;
 
   for (let i = 0; i < reviews.length; i += BATCH_SIZE) {

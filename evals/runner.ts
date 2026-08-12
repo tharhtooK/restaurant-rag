@@ -244,10 +244,16 @@ async function main() {
   writeFileSync(outFile, JSON.stringify({ passed, total: results.length, results }, null, 2));
   console.log(`\nfull results → ${outFile}`);
 
+  const ns = process.env.PINECONE_NAMESPACE;
   console.log(
-    "\nCAVEAT: review text was authored to satisfy these goldens' required_facts, so this\n" +
-      "score measures plumbing (routing, retrieval, grounding, refusal), not retrieval\n" +
-      "quality against independent data. See docs/status.md.",
+    ns === "web-research"
+      ? `\nCORPUS: independently-sourced reviews (namespace "${ns}"). Review text came from web\n` +
+          "research on what real reviewers say, gathered without consulting the goldens, so this\n" +
+          "score reflects retrieval against data the goldens did not author. Residual bias is\n" +
+          "documented in prisma/seed-data-independent.ts."
+      : "\nCAVEAT: this corpus's review text was authored to satisfy these goldens' required_facts,\n" +
+          "so the score measures plumbing (routing, retrieval, grounding, refusal), not retrieval\n" +
+          "quality. Re-run with PINECONE_NAMESPACE=web-research for the independent number.",
   );
 
   await prisma.$disconnect();
