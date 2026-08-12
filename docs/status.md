@@ -29,9 +29,11 @@ Against the planned order of operations:
 **Working today:** ask a question in the browser → agent selects tools → Postgres → grounded
 answer, rendered as markdown. Local stack is `docker compose up` (Next.js + Postgres 16).
 
-**Eval: 20/20 on the authored corpus, 18/20 on independently-sourced reviews.** ~35s per run.
-The 18/20 is the meaningful number — it grades retrieval against data the goldens did not
-author. See the circularity section below.
+**Eval: 18/20 on the authored corpus, 20/20 on independently-sourced reviews.** ~35s per run.
+The independent number is the meaningful one — it grades retrieval against data the goldens did
+not author. The authored corpus is now the *lower* of the two by design: G07 and G01 were
+corrected to match real reviews, and the authored review text contradicts both. See the
+circularity section below.
 
 **Deployed:** `https://restaurant-rag.vercel.app/` serves the UI and builds green, but the
 agent path does not work there — no Vercel environment variables, and `DATABASE_URL` points at
@@ -48,15 +50,24 @@ src/lib/tools/          retrieval
   filter-restaurants.ts   SQL path: neighborhood, cuisine, price tier, veg flag, hours
   search-opinions.ts      vector path: Pinecone semantic search over review chunks
   get-restaurant-details.ts  single-entity lookup
+  hours.ts                pure open/close predicates — no I/O, unit-tested
+  types.ts                shared retrieval types only
 src/lib/
   pinecone.ts             Pinecone + embedding clients (lazy singletons)
   db.ts                   Prisma client (lazy singleton)
+  logger.ts               leveled stderr logger, Node stdlib only
 src/lib/agent/
   index.ts                manual tool-calling loop, OpenAI Responses API (gpt-5.6-terra)
   tools.ts                zod schemas → JSON Schema tool defs + runtime arg validation
   system-prompt.ts        scope, refusal behavior, price-tier legend
 scripts/ingest/
   embed-upsert.ts         chunk + embed + upsert reviews to Pinecone
+evals/
+  runner.ts               orchestration + CLI only
+  scoring.ts              route / retrieval / rubric checks — pure, unit-tested
+  report.ts               console output + results file
+  judge.ts                LLM-as-judge for the rubric
+tests/                  node:test + tsx — 46 tests, no network, no new dependency
 src/app/api/chat/route.ts POST endpoint
 ```
 
@@ -89,10 +100,10 @@ goldens, isolated in the `web-research` Pinecone namespace:
 docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts
 ```
 
-**Authored 17/20 → independent 20/20** (after the G07 and G01 corrections below; before them,
-authored 20/20 → independent 18/20). The 3-point gap is the useful signal: two points are
-measured fabrication in the authored reviews, one is the G19 judge flake. Residual bias is
-documented in
+**Authored 18/20 → independent 20/20** (after the G07 and G01 corrections below; before them,
+authored 20/20 → independent 18/20). The 2-point gap is the useful signal, and since the G19
+rubric fix it is fully attributable: both points are measured fabrication in the authored
+reviews, with no judge noise left in the number. Residual bias is documented in
 `prisma/seed-data-independent.ts`: the themes were still selected and written by someone who
 had read the goldens. Weakened substantially, not eliminated.
 
@@ -126,12 +137,26 @@ Surfaced by the independent corpus:
 - **Fette Sau has closed.** G14 and G20 reference it. This is a dataset-freshness question
   rather than a wrong golden, so it is left alone deliberately.
 
-### The judge is non-deterministic
+### The judge is an LLM — write rubric items as propositions
 
 `must_mention` / `must_not_claim` are graded by an LLM judge, because both are semantic rather
-than literal ("don't have" is satisfied by "that isn't in my data"). G19 failed one run and
-passed the next on identical input. **Treat any score as ±1 item.** Run the suite several times
-before defending a specific number.
+than literal ("don't have" is satisfied by "that isn't in my data").
+
+**G19's flakiness was a rubric bug, not judge noise. FIXED 2026-08-12.** Its `must_mention` was
+three bare tokens — `["NYC", "can't", "Tokyo"]`. A bare token invites literal grading even
+though the judge is instructed to grade meaning, so the same answer passed when the judge read
+"NYC" semantically and failed when it demanded the literal string from an answer that had
+listed the five NYC neighborhoods. That demand was also stricter than the golden's own
+`required_facts`, which only asks that the coverage area be conveyed.
+
+Rewritten as propositions. Verified two ways: 5 consecutive passing runs, and by driving the
+judge directly with five hand-written answers — both good variants (including the
+neighborhoods-only phrasing that used to flake) pass, and all three bad variants fail, each for
+the right reason. An answer that declines Tokyo but never states coverage still fails, so the
+item retains its teeth.
+
+**Rule going forward: rubric items are statements, never keywords.** Scores are still not
+guaranteed reproducible, but no golden is currently known to flake.
 
 ### 20/20 was reached partly by adjusting the scorer
 
@@ -160,9 +185,10 @@ All 13 planned steps are done or explicitly substituted. What remains, in priori
 
 **1. ~~Break the eval's circularity.~~ DONE 2026-08-12.** A second corpus of
 independently-sourced reviews now lives in the `web-research` Pinecone namespace.
-**Authored corpus 17/20; independent corpus 20/20.** The authored corpus is now the lower
+**Authored corpus 18/20; independent corpus 20/20.** The authored corpus is now the lower
 number by design — G07 and G01 were corrected to match real reviews, and the authored data
-contradicts both. Its third failure is the known judge flake (G19).
+contradicts both. Those two are its only failures; the former third (G19) was a rubric bug and
+is fixed.
 
 **2. Make the deployment functional** — step-by-step guide in
 [`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone

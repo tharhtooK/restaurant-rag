@@ -661,9 +661,8 @@
     "golden_answer": "I can only speak to NYC — specifically East Village, Flushing, Williamsburg, Harlem, and Astoria — so I can't recommend anything in Tokyo. If you want a ramen fix closer to home, Momofuku Noodle Bar in the East Village is a solid pick with counter seating and good reviews.",
     "grading_rubric": {
       "must_mention": [
-        "NYC",
-        "can't",
-        "Tokyo"
+        "that it cannot recommend anywhere in Tokyo",
+        "that its coverage is New York City — naming NYC, New York, or the five NYC neighborhoods it covers all satisfy this"
       ],
       "must_not_claim": [
         "a specific Tokyo restaurant recommendation"
@@ -671,7 +670,7 @@
       "must_cite": true
     },
     "difficulty": "medium",
-    "notes": "Out-of-scope-city request. Tests that the agent states scope clearly rather than attempting to answer from general knowledge, while still redirecting usefully within scope."
+    "notes": "Out-of-scope-city request. Tests that the agent states scope clearly rather than attempting to answer from general knowledge, while still redirecting usefully within scope. REWRITTEN 2026-08-12: must_mention was previously the bare tokens ['NYC', \"can't\", 'Tokyo']. Bare tokens invite the judge to grade literally even though its instructions say to grade meaning, and this golden flaked in both directions on identical input — passing when the judge read 'NYC' semantically, failing when it demanded the literal string from an answer that had listed the five NYC neighborhoods. Note that naming those neighborhoods already satisfies this golden's own required_facts, so the literal-token demand was stricter than the golden asked for. The items are now propositions, matching the style used everywhere else in this file."
   },
   {
     "id": "G20",

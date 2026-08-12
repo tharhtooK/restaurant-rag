@@ -171,7 +171,7 @@ should import an LLM SDK.
 
 ## State
 
-**Eval: 17/20 authored corpus, 20/20 independent corpus.** ~35s per run.
+**Eval: 18/20 authored corpus, 20/20 independent corpus.** ~35s per run.
 
 Quote the **independent number**. The authored reviews were written to satisfy
 the goldens' `required_facts`, so scoring against them measures plumbing. The
@@ -186,13 +186,15 @@ asserts the opposite in both cases, so it fails both goldens, and those failures
 are the fabricated reviews being wrong, not the agent. A golden that passes
 against fabricated data is not doing its job.
 
-**The 3-point gap between the corpora is now the useful signal**, not either
-number alone: two of those points are measured fabrication in the authored
-reviews, one is the G19 judge flake.
+**The 2-point gap between the corpora is the useful signal**, not either number
+alone. Both points are measured fabrication in the authored reviews — G19's
+rubric was rewritten on 2026-08-12, so the gap no longer contains judge noise
+and is now fully attributable.
 
-Treat both numbers as ±1: the judge is non-deterministic and G19 has flaked in
-both directions on identical input. The deterministic checks are the stable
-signal — **route 20/20 and retrieval 20/20 on both corpora**.
+The judge is still an LLM and no score is guaranteed reproducible, but the
+golden that actually flaked has been fixed and no other is currently known to.
+The deterministic checks remain the stable signal — **route 20/20 and retrieval
+20/20 on both corpora**, unchanged across every run.
 
 Path to the earlier 20/20 on the authored corpus: 16/20 baseline → +2 real agent
 fixes → +2 golden corrections (the test was wrong) → +1 scorer correction.
@@ -245,8 +247,12 @@ goldens. A fully clean test would ingest raw third-party review text. The 6
 restaurants without independent reviews are reached only by the structured route
 or appear as forbidden distractors.
 
-**The judge is non-deterministic.** G19 failed one run and passed the next on
-identical input. Treat any score as ±1 item.
+**The judge is an LLM, so scores are not guaranteed reproducible.** G19 used to
+flake in both directions on identical input; its `must_mention` items were bare
+tokens ("NYC") that invited literal grading despite the judge being told to
+grade meaning. Rewritten as propositions on 2026-08-12 and stable over 5
+consecutive runs. Write rubric items as statements, not keywords — a bare token
+is the failure mode to avoid.
 
 **`.env` holds another project's live credentials** (Pinecone, LangSmith,
 Cal.com, Retell — a "medical-notes" project). Confirmed intentional. It is
