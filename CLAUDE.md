@@ -42,6 +42,7 @@ Problems. Everything else is polish.
 | Database | Postgres 16 (Docker) | |
 | ORM | **Prisma 7.9** | v7 needs an explicit driver adapter (`@prisma/adapter-pg`) — no built-in engine |
 | Vector store | Pinecone, index `restaurants` | 1536 dims, cosine |
+| Reranking | Pinecone Inference, `bge-reranker-v2-m3` | cross-encoder over a 20-candidate pool, returns 8 |
 | LLM | OpenAI `gpt-5.6-terra` via **Responses API** | not Chat Completions |
 | Embeddings | `text-embedding-3-small` (1536 dims) | must match the index |
 | Tracing | LangSmith via `wrapOpenAI` | `src/lib/openai.ts` |
@@ -96,7 +97,7 @@ anonymous `node_modules` volume). Installing on the host alone is not enough.
 ```
 src/lib/tools/            retrieval, provider-agnostic
   filter-restaurants.ts     SQL: neighborhood, cuisine, price tier, veg, hours
-  search-opinions.ts        Pinecone semantic search over review chunks
+  search-opinions.ts        Pinecone semantic search + cross-encoder rerank
   get-restaurant-details.ts single-entity lookup (returns BOTH facts and reviews)
   hours.ts                  pure open/close predicates — no I/O, unit-tested
   types.ts                  shared retrieval types only
@@ -271,6 +272,29 @@ is the failure mode to avoid.
 Cal.com, Retell — a "medical-notes" project). Confirmed intentional. It is
 gitignored, but real keys sit in this working directory. `LANGSMITH_PROJECT`
 must be set to `restaurant-rag`, or traces land in that other project.
+
+**Reranking is unmeasured by the eval.** `search_opinions` pulls a 20-candidate
+pool, reranks with `bge-reranker-v2-m3`, and returns 8 (2026-08-12). Both
+corpora scored identically before and after, and again after widening 5 → 8 —
+20/20 independent, 18/20 authored — because the independent corpus was already
+at ceiling, so the eval has no headroom to show a gain. It can only catch a
+regression, which is what those runs actually verify.
+
+Measured directly instead. The reranker picks the right top-1 decisively (0.759
+vs 0.540 by cosine for counter-dining) but then collapses to ~0.000, so ordering
+within the tail carries little signal. Returning 8 rather than 5 exists for that
+reason: across 5 vibe queries, cutting at 5 dropped 4 vector-top-5 restaurants
+and cutting at 8 dropped 3. Modest, and note that some drops are correct — the
+reranker demoting Fette Sau for "eating alone at the counter" is the feature
+working, not lost recall.
+
+`cohere-rerank-3.5` is likely better calibrated but this Pinecone project is not
+authorized for it (403). `pinecone-rerank-v0` was worse than bge — it ranked an
+explicitly "noisy room" snippet above one about quieter midweek visits.
+
+At 20 restaurants a 20-candidate pool is most of the namespace, so the reranker
+is effectively doing retrieval rather than refining it. Fine here; not what the
+design would look like at scale.
 
 **Decided: Prisma only.** The original architecture sketch specified drizzle;
 that is superseded. Do not introduce drizzle or a second ORM.
