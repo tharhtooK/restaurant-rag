@@ -1,0 +1,70 @@
+# Files Claude should not read.
+#
+# NOTE: the enforced mechanism is `permissions.deny` in .claude/settings.json,
+# which mirrors this list. Keep the two in sync if you edit either.
+
+# ---- dependencies ----
+# Caveat: node_modules is also the only reliable source of truth for installed
+# SDK type signatures, and reading it caught real bugs this session (Pinecone's
+# upsert shape, whether wrapOpenAI patches the Responses API). If you find
+# yourself guessing an SDK signature, unblock this deliberately rather than
+# guessing. See CLAUDE.md -> Code style.
+node_modules/
+.pnp
+.pnp.*
+.yarn/
+
+# ---- lockfiles ----
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# ---- build output / caches ----
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.turbo/
+.vercel/
+.swc/
+
+# ---- generated code ----
+# Regenerate with: docker compose exec web npx prisma generate
+src/generated/
+
+# ---- eval artifacts ----
+# Timestamped run output; regenerate with evals/runner.ts
+evals/results/
+
+# ---- secrets ----
+# .env currently holds live third-party keys (see CLAUDE.md -> Known problems).
+# .env.example is the file to read for the expected shape.
+.env
+.env.*
+!.env.example
+
+# ---- binary / media ----
+*.ico
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.avif
+*.svg
+*.woff
+*.woff2
+*.ttf
+*.otf
+*.pdf
+*.zip
+*.tar.gz
+*.mp4
+*.mov
+
+# ---- vcs / os / editor ----
+.git/
+.DS_Store
+*.log

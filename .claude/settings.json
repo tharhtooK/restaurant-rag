@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./node_modules/**)",
+      "Read(./.next/**)",
+      "Read(./dist/**)",
+      "Read(./build/**)",
+      "Read(./out/**)",
+      "Read(./coverage/**)",
+      "Read(./src/generated/**)",
+      "Read(./evals/results/**)",
+      "Read(./package-lock.json)",
+      "Read(./pnpm-lock.yaml)",
+      "Read(./yarn.lock)",
+      "Read(./*.tsbuildinfo)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

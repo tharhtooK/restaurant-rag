@@ -1,1 +1,209 @@
 @AGENTS.md
+
+# restaurant-rag
+
+## Objective
+
+A capstone RAG system: a restaurant recommendation assistant over a small,
+deliberately-bounded dataset, built so that **retrieval quality can be measured
+rather than asserted**.
+
+Scope is fixed and load-bearing — narrowness is the point, because it makes the
+eval tractable:
+
+- **NYC, 5 neighborhoods:** East Village, Flushing, Williamsburg, Harlem, Astoria
+- **20 restaurants**, real and verified (see `docs/data-manifest.md`)
+- **Two retrieval paths:** Postgres for structured facts, Pinecone for semantic
+  search over review prose
+- **One router + tool-calling agent** — not a multi-agent system
+
+The goal is not "a chatbot that answers about restaurants." It is a system whose
+answers are **graded against a golden set**, where a regression shows up as a
+number. Anything that makes the eval less meaningful is a bug, even if the app
+still works.
+
+### Direction
+
+Built in the planned order: taxonomy → goldens → data manifest → schema → tools
+→ agent → embeddings → eval harness → failure loop. All 13 steps are done or
+explicitly substituted (scraping was replaced by web research; see below).
+
+**The next meaningful work is breaking the eval's circularity** — see Known
+Problems. Everything else is polish.
+
+## Tech stack
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Framework | Next.js 16.3.0 (App Router) | See `AGENTS.md` — this version has breaking changes vs. training data |
+| Language | TypeScript 5, React 19.2 | strict mode |
+| Styling | Tailwind CSS v4 | dark-only, monochrome accent |
+| Database | Postgres 16 (Docker) | |
+| ORM | **Prisma 7.9** | v7 needs an explicit driver adapter (`@prisma/adapter-pg`) — no built-in engine |
+| Vector store | Pinecone, index `restaurants` | 1536 dims, cosine |
+| LLM | OpenAI `gpt-5.6-terra` via **Responses API** | not Chat Completions |
+| Embeddings | `text-embedding-3-small` (1536 dims) | must match the index |
+| Tracing | LangSmith via `wrapOpenAI` | `src/lib/openai.ts` |
+| Local dev | Docker Compose | `node:22-bookworm-slim` + Postgres 16 |
+
+**All OpenAI traffic routes through a LiteLLM proxy** (`OPENAI_BASE_URL`), not
+`api.openai.com`.
+
+## Commands
+
+Everything runs **inside the web container**. `.env` is loaded by Next.js from
+the bind-mounted project root, *not* injected as container env vars — so
+`docker compose exec web env` will not show `OPENAI_API_KEY` et al. That is
+expected, not a bug.
+
+```bash
+docker compose up -d                  # start Next.js + Postgres
+docker compose up -d --build -V web   # rebuild after adding a dependency
+docker compose logs -f web
+```
+
+```bash
+# checks — run both before every commit
+docker compose exec web npx tsc --noEmit
+docker compose exec web npm run lint
+```
+
+```bash
+# eval (the important one)
+docker compose exec web npx tsx evals/runner.ts          # all 20 goldens
+docker compose exec web npx tsx evals/runner.ts G01 G05  # a subset
+```
+
+```bash
+# data
+docker compose exec web npx prisma migrate dev --name <name>
+docker compose exec web npx prisma db seed
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts   # re-embed to Pinecone
+docker compose exec db psql -U app -d restaurant_rag
+```
+
+Adding a dependency requires a **container rebuild** (`-V` to reset the
+anonymous `node_modules` volume). Installing on the host alone is not enough.
+
+## Architecture
+
+```
+src/lib/tools/            retrieval, provider-agnostic
+  filter-restaurants.ts     SQL: neighborhood, cuisine, price tier, veg, hours
+  search-opinions.ts        Pinecone semantic search over review chunks
+  get-restaurant-details.ts single-entity lookup (returns BOTH facts and reviews)
+src/lib/
+  openai.ts                 one LangSmith-wrapped OpenAI client, shared
+  pinecone.ts               Pinecone index + embedding helpers
+  db.ts                     Prisma client
+src/lib/agent/
+  index.ts                  manual tool-calling loop over the Responses API
+  tools.ts                  zod schemas -> JSON Schema defs + runtime validation
+  system-prompt.ts          scope, refusal rules, price-tier legend
+scripts/ingest/
+  embed-upsert.ts           chunk + embed + upsert reviews
+evals/
+  golden.json               20 graded queries
+  runner.ts                 scores route / retrieval / rubric
+  judge.ts                  LLM-as-judge for the rubric
+docs/
+  taxonomy.md               6 query categories
+  data-manifest.md          slug -> real restaurant mapping
+  status.md                 running project status
+```
+
+## Code style
+
+Strict, and derived from what is already in the codebase — match it.
+
+**Clients are lazy singletons.** Never construct an API client at module scope.
+Importing a module must not throw because a key is missing; only *using* it
+should. `/api/chat` depends on this to return a clean error instead of a 500
+from a failed route load.
+
+```ts
+let client: X | null = null;
+export function getX() { if (!client) client = new X(); return client; }
+```
+
+**Never guess an SDK signature.** Read the installed `.d.ts` in `node_modules`.
+This session lost time to a guessed Pinecone `upsert(array)` that actually takes
+`{ records: [...] }`, and nearly shipped a LangSmith wrapper that would have been
+a silent no-op if it hadn't turned out to patch the Responses API.
+
+**Verify, don't assert.** A change is not done because it type-checks. Run it.
+Where behavior is claimed, produce the output that proves it.
+
+**Comments explain *why*, never *what*.** Existing comments in `evals/runner.ts`
+and `search-opinions.ts` document *interpretation decisions* — that is the bar.
+No comment should restate the line below it.
+
+**Absence of data is a feature.** The schema deliberately has no reservations,
+parking, or wait-time fields. Do not add them. Their absence is what makes the
+refusal goldens (G16/G17/G20) gradable instead of untested.
+
+Other rules: no `any` (use `unknown` + a zod parse); zod schemas are the single
+source of truth for tool args (reused for both JSON Schema and runtime
+validation); tools return provider-agnostic types — nothing in `src/lib/tools/`
+should import an LLM SDK.
+
+## State
+
+**Eval: 20/20.** Route 20/20, retrieval 20/20, rubric 20/20. ~35s for a full run.
+
+Path there: 16/20 baseline → +2 real agent fixes → +2 golden corrections (the
+test was wrong) → +1 scorer correction. Recorded in `docs/status.md`, because a
+100% that involved adjusting the scorer deserves scrutiny.
+
+### How we got here
+
+1. Scaffolded Next.js, deployed to Vercel, added Docker + Postgres + Prisma.
+2. Built the chat UI (dark, monochrome, markdown) against a fake reply.
+3. **Taxonomy** (6 categories) → **20 goldens** → **data manifest** mapping
+   invented slugs to real restaurants.
+4. Scrapers were **dropped** (no API keys) in favour of web research. Restaurant
+   identities are real; **review text is fabricated**.
+5. Schema + seed, three retrieval tools, tool-calling agent.
+6. **Pivoted the agent from Anthropic to OpenAI** when only an OpenAI key was
+   available. The retrieval tools needed no changes — they never imported an
+   LLM SDK, which is why that rule is in Code Style.
+7. Pinecone embeddings replaced the Postgres full-text stand-in.
+8. Eval runner + failure loop.
+9. LangSmith tracing via a single wrapped client.
+
+### Bugs caught by testing, not review
+
+Kept because each one is a pattern likely to recur:
+
+- **Seed data silently broke a test.** A restaurant's hours made it open past
+  midnight, so it would have satisfied "open after 11pm" and destroyed its role
+  as a distractor in G02. Found by scripting golden facts against seed data.
+- **Price tiers had no dollar mapping**, so "under $20" became `priceTierMax: 1`
+  and returned nothing. Fixed with a tier legend in the system prompt.
+- **Pinecone is eventually consistent.** A retrieval check run seconds after
+  ingestion scored 7/8 with a nonsense ranking; the identical check scored 8/8
+  once the index settled. Never measure retrieval immediately after an upsert.
+- **Goldens referenced restaurants that did not exist** — the query text still
+  used pre-manifest placeholder names.
+
+## Known problems
+
+**The eval is circular — this is the most important caveat in the project.**
+Review text was authored to satisfy the goldens' `required_facts`, then the
+goldens were verified against those same reviews. 20/20 measures *plumbing*
+(routing, retrieval, grounding, refusal), **not retrieval quality**. The runner
+prints this caveat with every score so the number cannot be quoted alone. Fixing
+it — sourcing even a handful of reviews independently of the goldens — is the
+highest-value work remaining.
+
+**The judge is non-deterministic.** G19 failed one run and passed the next on
+identical input. Treat any score as ±1 item.
+
+**`.env` holds another project's live credentials** (Pinecone, LangSmith,
+Cal.com, Retell — a "medical-notes" project). Confirmed intentional. It is
+gitignored, but real keys sit in this working directory. `LANGSMITH_PROJECT`
+must be set to `restaurant-rag`, or traces land in that other project.
+
+**Unresolved:** Prisma vs. drizzle (the original sketch specified drizzle; the
+project runs on Prisma) and the monorepo split (`python-scraper/` +
+`nextjs-rag/` was planned; this is a flat repo).
