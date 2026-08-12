@@ -1,4 +1,5 @@
 @AGENTS.md
+@docs/coding-guidelines.md
 
 # restaurant-rag
 
