@@ -193,8 +193,21 @@ and is now fully attributable.
 
 The judge is still an LLM and no score is guaranteed reproducible, but the
 golden that actually flaked has been fixed and no other is currently known to.
-The deterministic checks remain the stable signal — **route 20/20 and retrieval
-20/20 on both corpora**, unchanged across every run.
+
+**Do not describe route and retrieval as "the deterministic checks".** The
+scoring functions in `scoring.ts` are pure and unit-tested, but their *inputs*
+are model output, so only part of what they grade is stable:
+
+| Check | Graded against | Stable? |
+|---|---|---|
+| route | which tools were called | mostly — the agent rarely varies its path |
+| retrieval, required slugs | raw tool output | yes — a slug either surfaced or it did not |
+| retrieval, forbidden slugs | the **answer text** | **no** — same LLM variance as the rubric |
+| rubric | the answer text | no |
+
+Observed 2026-08-12: G09 failed on a forbidden slug in one full run and passed
+3/3 on re-run, with no code change. Treat a single failing run as a signal to
+re-run that golden, not as a regression.
 
 Path to the earlier 20/20 on the authored corpus: 16/20 baseline → +2 real agent
 fixes → +2 golden corrections (the test was wrong) → +1 scorer correction.
