@@ -12,19 +12,48 @@ export type ReviewVectorMetadata = {
   content: string;
 };
 
+export const RERANK_MODEL = "bge-reranker-v2-m3";
+
+export type RankedIndex = {
+  index: number;
+  score: number;
+};
+
 // Lazy singletons: importing this module must not throw when credentials are
 // absent - only actually using the clients should.
 let pinecone: Pinecone | null = null;
 
-export function getPineconeIndex() {
+function getPineconeClient(): Pinecone {
   if (!pinecone) {
     const apiKey = process.env.PINECONE_API_KEY;
     if (!apiKey) throw new Error("PINECONE_API_KEY is not set");
     pinecone = new Pinecone({ apiKey });
   }
+  return pinecone;
+}
+
+export function getPineconeIndex() {
   const indexName = process.env.PINECONE_INDEX;
   if (!indexName) throw new Error("PINECONE_INDEX is not set");
-  return pinecone.index<ReviewVectorMetadata>(indexName);
+  return getPineconeClient().index<ReviewVectorMetadata>(indexName);
+}
+
+/**
+ * Cross-encoder reranking. Returns positions into `documents` in descending
+ * relevance, which the caller maps back to whatever it embedded.
+ */
+export async function rerank(
+  query: string,
+  documents: string[],
+  topN: number,
+): Promise<RankedIndex[]> {
+  const result = await getPineconeClient().inference.rerank({
+    model: RERANK_MODEL,
+    query,
+    documents,
+    topN,
+  });
+  return result.data.map((ranked) => ({ index: ranked.index, score: ranked.score }));
 }
 
 export async function embed(texts: string[]): Promise<number[][]> {
