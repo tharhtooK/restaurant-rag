@@ -1,5 +1,7 @@
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { Hours, RestaurantSummary, timeToMinutes } from "./types";
+import { matchesHours } from "./hours";
+import { Hours, RestaurantSummary } from "./types";
 
 export type FilterRestaurantsInput = {
   neighborhood?: string;
@@ -7,65 +9,48 @@ export type FilterRestaurantsInput = {
   priceTierMin?: number;
   priceTierMax?: number;
   vegetarianFriendly?: boolean;
-  /** Restaurant must be open past this time (HH:MM, 24h) on at least one day of the week. */
   openPast?: string;
-  /** Restaurant must open at or before this time (HH:MM, 24h) on at least one day of the week. */
   opensBy?: string;
 };
 
-function matchesOpenPast(hours: Hours, threshold: string): boolean {
-  const thresholdMin = timeToMinutes(threshold);
-  return Object.values(hours).some((day) => {
-    if (!day) return false;
-    return timeToMinutes(day.close) > thresholdMin;
-  });
-}
+function buildWhere(input: FilterRestaurantsInput): Prisma.RestaurantWhereInput {
+  const where: Prisma.RestaurantWhereInput = {};
 
-function matchesOpensBy(hours: Hours, threshold: string): boolean {
-  const thresholdMin = timeToMinutes(threshold);
-  return Object.values(hours).some((day) => {
-    if (!day) return false;
-    return timeToMinutes(day.open) <= thresholdMin;
-  });
+  if (input.neighborhood) where.neighborhood = input.neighborhood;
+  if (input.cuisine) where.cuisine = { contains: input.cuisine, mode: "insensitive" };
+  if (input.vegetarianFriendly !== undefined) where.vegetarianFriendly = input.vegetarianFriendly;
+
+  const priceTier: Prisma.IntFilter = {};
+  if (input.priceTierMin !== undefined) priceTier.gte = input.priceTierMin;
+  if (input.priceTierMax !== undefined) priceTier.lte = input.priceTierMax;
+  if (priceTier.gte !== undefined || priceTier.lte !== undefined) where.priceTier = priceTier;
+
+  return where;
 }
 
 export async function filterRestaurants(
   input: FilterRestaurantsInput,
 ): Promise<RestaurantSummary[]> {
   const rows = await prisma.restaurant.findMany({
-    where: {
-      ...(input.neighborhood ? { neighborhood: input.neighborhood } : {}),
-      ...(input.cuisine ? { cuisine: { contains: input.cuisine, mode: "insensitive" } } : {}),
-      ...(input.vegetarianFriendly !== undefined
-        ? { vegetarianFriendly: input.vegetarianFriendly }
-        : {}),
-      ...(input.priceTierMin !== undefined || input.priceTierMax !== undefined
-        ? {
-            priceTier: {
-              ...(input.priceTierMin !== undefined ? { gte: input.priceTierMin } : {}),
-              ...(input.priceTierMax !== undefined ? { lte: input.priceTierMax } : {}),
-            },
-          }
-        : {}),
-    },
+    where: buildWhere(input),
     orderBy: { name: "asc" },
   });
 
-  return rows
-    .filter((r) => {
-      const hours = r.hours as unknown as Hours;
-      if (input.openPast && !matchesOpenPast(hours, input.openPast)) return false;
-      if (input.opensBy && !matchesOpensBy(hours, input.opensBy)) return false;
-      return true;
-    })
-    .map((r) => ({
-      slug: r.slug,
-      name: r.name,
-      neighborhood: r.neighborhood,
-      cuisine: r.cuisine,
-      priceTier: r.priceTier,
-      address: r.address,
-      vegetarianFriendly: r.vegetarianFriendly,
-      hours: r.hours as unknown as Hours,
-    }));
+  const summaries: RestaurantSummary[] = [];
+  for (const row of rows) {
+    const hours = row.hours as unknown as Hours;
+    if (!matchesHours(hours, input)) continue;
+
+    summaries.push({
+      slug: row.slug,
+      name: row.name,
+      neighborhood: row.neighborhood,
+      cuisine: row.cuisine,
+      priceTier: row.priceTier,
+      address: row.address,
+      vegetarianFriendly: row.vegetarianFriendly,
+      hours,
+    });
+  }
+  return summaries;
 }

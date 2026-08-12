@@ -19,11 +19,11 @@ let client: ReturnType<typeof wrapOpenAI<OpenAI>> | null = null;
 
 export function getOpenAI() {
   if (!client) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+
     client = wrapOpenAI(
-      new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        baseURL: process.env.OPENAI_BASE_URL,
-      }),
+      new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL }),
       { project_name: process.env.LANGSMITH_PROJECT || DEFAULT_PROJECT },
     );
   }

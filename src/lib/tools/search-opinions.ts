@@ -24,32 +24,35 @@ export type OpinionMatch = {
  * Pinecone metadata filters so they compose with the vector search rather than
  * being applied after top-K truncation.
  */
-export async function searchOpinions(input: SearchOpinionsInput): Promise<OpinionMatch[]> {
-  const topK = input.limit ?? 5;
-
+export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, unknown> | null {
   const filters: Record<string, unknown>[] = [];
   if (input.neighborhood) filters.push({ neighborhood: { $eq: input.neighborhood } });
   if (input.restaurantSlugs?.length) {
     filters.push({ restaurantSlug: { $in: input.restaurantSlugs } });
   }
 
+  if (filters.length === 0) return null;
+  if (filters.length === 1) return filters[0];
+  return { $and: filters };
+}
+
+// PINECONE_NAMESPACE lets the eval point retrieval at an isolated corpus
+// (e.g. only independently-sourced reviews). Unset = the default namespace.
+function getSearchIndex() {
+  const base = getPineconeIndex();
+  const namespace = process.env.PINECONE_NAMESPACE;
+  return namespace ? base.namespace(namespace) : base;
+}
+
+export async function searchOpinions(input: SearchOpinionsInput): Promise<OpinionMatch[]> {
+  const filter = buildMetadataFilter(input);
   const vector = await embedOne(input.query);
 
-  // PINECONE_NAMESPACE lets the eval point retrieval at an isolated corpus
-  // (e.g. only independently-sourced reviews). Unset = the default namespace.
-  const base = getPineconeIndex();
-  const ns = process.env.PINECONE_NAMESPACE;
-  const index = ns ? base.namespace(ns) : base;
-
-  const response = await index.query({
+  const response = await getSearchIndex().query({
     vector,
-    topK,
+    topK: input.limit ?? 5,
     includeMetadata: true,
-    ...(filters.length === 1
-      ? { filter: filters[0] }
-      : filters.length > 1
-        ? { filter: { $and: filters } }
-        : {}),
+    ...(filter ? { filter } : {}),
   });
 
   return (response.matches ?? []).map((match) => ({

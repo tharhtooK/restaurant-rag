@@ -1,4 +1,5 @@
 @AGENTS.md
+@docs/coding-guidelines.md
 
 # restaurant-rag
 
@@ -63,9 +64,10 @@ docker compose logs -f web
 ```
 
 ```bash
-# checks — run both before every commit
+# checks — run all three before every commit
 docker compose exec web npx tsc --noEmit
 docker compose exec web npm run lint
+docker compose exec web npm test           # 46 unit tests, ~0.2s, no network
 ```
 
 ```bash
@@ -96,10 +98,13 @@ src/lib/tools/            retrieval, provider-agnostic
   filter-restaurants.ts     SQL: neighborhood, cuisine, price tier, veg, hours
   search-opinions.ts        Pinecone semantic search over review chunks
   get-restaurant-details.ts single-entity lookup (returns BOTH facts and reviews)
+  hours.ts                  pure open/close predicates — no I/O, unit-tested
+  types.ts                  shared retrieval types only
 src/lib/
   openai.ts                 one LangSmith-wrapped OpenAI client, shared
   pinecone.ts               Pinecone index + embedding helpers
   db.ts                     Prisma client
+  logger.ts                 leveled stderr logger, Node stdlib only
 src/lib/agent/
   index.ts                  manual tool-calling loop over the Responses API
   tools.ts                  zod schemas -> JSON Schema defs + runtime validation
@@ -108,8 +113,15 @@ scripts/ingest/
   embed-upsert.ts           chunk + embed + upsert reviews
 evals/
   golden.json               20 graded queries
-  runner.ts                 scores route / retrieval / rubric
+  runner.ts                 orchestration + CLI only
+  scoring.ts                route / retrieval / rubric checks — pure, unit-tested
+  report.ts                 console output + results file
   judge.ts                  LLM-as-judge for the rubric
+tests/                    node:test + tsx, no new dependency
+  scoring.test.ts           the eval's own scoring rules
+  hours.test.ts             open/close boundary conditions
+  search-filter.test.ts     Pinecone metadata filter branching
+  logger.test.ts            level filtering and field formatting
 docs/
   taxonomy.md               6 query categories
   data-manifest.md          slug -> real restaurant mapping
@@ -159,22 +171,35 @@ should import an LLM SDK.
 
 ## State
 
-**Eval: 20/20 authored corpus, 18/20 independent corpus.** ~35s per run.
+**Eval: 18/20 authored corpus, 20/20 independent corpus.** ~35s per run.
 
-Quote the **18/20**. The authored reviews were written to satisfy the goldens'
-`required_facts`, so scoring against them measures plumbing. The independent
-corpus (`web-research` namespace) was sourced from real review content gathered
-without consulting the goldens, so it grades retrieval.
+Quote the **independent number**. The authored reviews were written to satisfy
+the goldens' `required_facts`, so scoring against them measures plumbing. The
+independent corpus (`web-research` namespace) was sourced from real review
+content gathered without consulting the goldens, so it grades retrieval.
 
-Path to 20/20 on the authored corpus: 16/20 baseline → +2 real agent fixes → +2
-golden corrections (the test was wrong) → +1 scorer correction. Recorded in
-`docs/status.md`, because a 100% that involved adjusting the scorer deserves
-scrutiny.
+**The authored corpus now scores lower on purpose.** G07 and G01 were corrected
+on 2026-08-12 to encode what real reviews say — Tian Jin Dumpling House is the
+Flushing hidden gem rather than Lanzhou, and no Korean BBQ in the set comes in
+under $20 (the authored "$17 weekday lunch" was invented). The authored corpus
+asserts the opposite in both cases, so it fails both goldens, and those failures
+are the fabricated reviews being wrong, not the agent. A golden that passes
+against fabricated data is not doing its job.
 
-The independent run also found that **real data contradicts several goldens** —
-most sharply G07, where the golden requires Lanzhou as the "hidden gem" purely
-because the authored review said so, while real reviews point clearly at Tian
-Jin Dumpling House. Details in `docs/status.md`.
+**The 2-point gap between the corpora is the useful signal**, not either number
+alone. Both points are measured fabrication in the authored reviews — G19's
+rubric was rewritten on 2026-08-12, so the gap no longer contains judge noise
+and is now fully attributable.
+
+The judge is still an LLM and no score is guaranteed reproducible, but the
+golden that actually flaked has been fixed and no other is currently known to.
+The deterministic checks remain the stable signal — **route 20/20 and retrieval
+20/20 on both corpora**, unchanged across every run.
+
+Path to the earlier 20/20 on the authored corpus: 16/20 baseline → +2 real agent
+fixes → +2 golden corrections (the test was wrong) → +1 scorer correction.
+Recorded in `docs/status.md`, because a 100% that involved adjusting the scorer
+deserves scrutiny.
 
 ### How we got here
 
@@ -209,16 +234,25 @@ Kept because each one is a pattern likely to recur:
 
 ## Known problems
 
-**The eval is circular — this is the most important caveat in the project.**
-Review text was authored to satisfy the goldens' `required_facts`, then the
-goldens were verified against those same reviews. 20/20 measures *plumbing*
-(routing, retrieval, grounding, refusal), **not retrieval quality**. The runner
-prints this caveat with every score so the number cannot be quoted alone. Fixing
-it — sourcing even a handful of reviews independently of the goldens — is the
-highest-value work remaining.
+**The authored corpus is circular — mostly addressed, not eliminated.** Review
+text in `seed-data.ts` was authored to satisfy the goldens' `required_facts`,
+then the goldens were verified against those same reviews, so its score measures
+*plumbing* (routing, retrieval, grounding, refusal), **not retrieval quality**.
+The independent `web-research` corpus fixes this for 14 of 20 restaurants; the
+runner prints which corpus produced a score so the number cannot be quoted alone.
 
-**The judge is non-deterministic.** G19 failed one run and passed the next on
-identical input. Treat any score as ±1 item.
+Residual bias remains and is stated in `prisma/seed-data-independent.ts`: the
+independent reviews were still selected and written by someone who had read the
+goldens. A fully clean test would ingest raw third-party review text. The 6
+restaurants without independent reviews are reached only by the structured route
+or appear as forbidden distractors.
+
+**The judge is an LLM, so scores are not guaranteed reproducible.** G19 used to
+flake in both directions on identical input; its `must_mention` items were bare
+tokens ("NYC") that invited literal grading despite the judge being told to
+grade meaning. Rewritten as propositions on 2026-08-12 and stable over 5
+consecutive runs. Write rubric items as statements, not keywords — a bare token
+is the failure mode to avoid.
 
 **`.env` holds another project's live credentials** (Pinecone, LangSmith,
 Cal.com, Retell — a "medical-notes" project). Confirmed intentional. It is

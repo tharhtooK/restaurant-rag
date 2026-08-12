@@ -29,9 +29,11 @@ Against the planned order of operations:
 **Working today:** ask a question in the browser → agent selects tools → Postgres → grounded
 answer, rendered as markdown. Local stack is `docker compose up` (Next.js + Postgres 16).
 
-**Eval: 20/20 on the authored corpus, 18/20 on independently-sourced reviews.** ~35s per run.
-The 18/20 is the meaningful number — it grades retrieval against data the goldens did not
-author. See the circularity section below.
+**Eval: 18/20 on the authored corpus, 20/20 on independently-sourced reviews.** ~35s per run.
+The independent number is the meaningful one — it grades retrieval against data the goldens did
+not author. The authored corpus is now the *lower* of the two by design: G07 and G01 were
+corrected to match real reviews, and the authored review text contradicts both. See the
+circularity section below.
 
 **Deployed:** `https://restaurant-rag.vercel.app/` serves the UI and builds green, but the
 agent path does not work there — no Vercel environment variables, and `DATABASE_URL` points at
@@ -48,15 +50,24 @@ src/lib/tools/          retrieval
   filter-restaurants.ts   SQL path: neighborhood, cuisine, price tier, veg flag, hours
   search-opinions.ts      vector path: Pinecone semantic search over review chunks
   get-restaurant-details.ts  single-entity lookup
+  hours.ts                pure open/close predicates — no I/O, unit-tested
+  types.ts                shared retrieval types only
 src/lib/
   pinecone.ts             Pinecone + embedding clients (lazy singletons)
   db.ts                   Prisma client (lazy singleton)
+  logger.ts               leveled stderr logger, Node stdlib only
 src/lib/agent/
   index.ts                manual tool-calling loop, OpenAI Responses API (gpt-5.6-terra)
   tools.ts                zod schemas → JSON Schema tool defs + runtime arg validation
   system-prompt.ts        scope, refusal behavior, price-tier legend
 scripts/ingest/
   embed-upsert.ts         chunk + embed + upsert reviews to Pinecone
+evals/
+  runner.ts               orchestration + CLI only
+  scoring.ts              route / retrieval / rubric checks — pure, unit-tested
+  report.ts               console output + results file
+  judge.ts                LLM-as-judge for the rubric
+tests/                  node:test + tsx — 46 tests, no network, no new dependency
 src/app/api/chat/route.ts POST endpoint
 ```
 
@@ -89,29 +100,63 @@ goldens, isolated in the `web-research` Pinecone namespace:
 docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts
 ```
 
-**Authored 20/20 → independent 18/20.** Residual bias is documented in
+**Authored 18/20 → independent 20/20** (after the G07 and G01 corrections below; before them,
+authored 20/20 → independent 18/20). The 2-point gap is the useful signal, and since the G19
+rubric fix it is fully attributable: both points are measured fabrication in the authored
+reviews, with no judge noise left in the number. Residual bias is documented in
 `prisma/seed-data-independent.ts`: the themes were still selected and written by someone who
 had read the goldens. Weakened substantially, not eliminated.
 
 ### Real data contradicts several goldens
 
-Surfaced by the independent corpus, unresolved:
+Surfaced by the independent corpus:
 
-- **G07** asks which Flushing spot is the biggest hidden gem. The golden requires Lanzhou,
-  because the authored review said so. Real reviews give Lanzhou no hidden-gem framing at all
-  and describe Tian Jin Dumpling House as "buried in the basement", "completely unassuming",
-  "genuinely hard to find". The agent picked Tian Jin. **The golden is probably backwards.**
-- **G01** requires "at least one entree under $20" at Picnic Garden. Real reviews report AYCE
-  at ~$41/person. That fact was satisfiable only because it was authored.
+- **G07 — RESOLVED 2026-08-12.** Asks which Flushing spot is the biggest hidden gem. The
+  golden required Lanzhou, because the authored review said so. Real reviews give Lanzhou no
+  hidden-gem framing at all and describe Tian Jin Dumpling House as "buried in the basement",
+  "completely unassuming", "genuinely hard to find". The golden was backwards and has been
+  swapped: Tian Jin is now required, Lanzhou acceptable.
+
+  Swapping `required` and `must_mention` alone was **not** enough — it passed on both corpora,
+  because the authored-corpus agent still led with Lanzhou and name-checked Tian Jin as an
+  aside, which satisfies a mention check. A second `must_not_claim` forbidding Lanzhou as the
+  *strongest* pick is what makes the golden discriminate. It now fails on the authored corpus
+  and passes on the independent one, which is the correct shape: a golden that passes against
+  fabricated data is not testing anything.
+- **G01 — RESOLVED 2026-08-12.** Required "at least one entree under $20" at Picnic Garden,
+  satisfiable only because the authored review invented a $17 weekday lunch. Real reviews put
+  the all-you-can-eat at ~$41/person, and the only other Flushing Korean BBQ (San Soo Kap San)
+  is tier 4 and dearer still — so **no restaurant in the dataset can satisfy the query**.
+
+  Rather than delete the golden, it was inverted into a grounding test: the agent must decline
+  the under-$20 claim while still surfacing the closest option. On the independent corpus it
+  answers "I don't have a Flushing Korean BBQ option with plates under $20... reviews put its
+  all-you-can-eat at about $41 per person", which is exactly the target behaviour. On the
+  authored corpus it cites the fabricated $17 lunch and fails. Difficulty raised easy → medium.
 - **Manna's** price is contested in real reviews; the authored set called it plainly affordable.
-- **Fette Sau has closed.** G14 and G20 reference it.
+- **Fette Sau has closed.** G14 and G20 reference it. This is a dataset-freshness question
+  rather than a wrong golden, so it is left alone deliberately.
 
-### The judge is non-deterministic
+### The judge is an LLM — write rubric items as propositions
 
 `must_mention` / `must_not_claim` are graded by an LLM judge, because both are semantic rather
-than literal ("don't have" is satisfied by "that isn't in my data"). G19 failed one run and
-passed the next on identical input. **Treat any score as ±1 item.** Run the suite several times
-before defending a specific number.
+than literal ("don't have" is satisfied by "that isn't in my data").
+
+**G19's flakiness was a rubric bug, not judge noise. FIXED 2026-08-12.** Its `must_mention` was
+three bare tokens — `["NYC", "can't", "Tokyo"]`. A bare token invites literal grading even
+though the judge is instructed to grade meaning, so the same answer passed when the judge read
+"NYC" semantically and failed when it demanded the literal string from an answer that had
+listed the five NYC neighborhoods. That demand was also stricter than the golden's own
+`required_facts`, which only asks that the coverage area be conveyed.
+
+Rewritten as propositions. Verified two ways: 5 consecutive passing runs, and by driving the
+judge directly with five hand-written answers — both good variants (including the
+neighborhoods-only phrasing that used to flake) pass, and all three bad variants fail, each for
+the right reason. An answer that declines Tokyo but never states coverage still fails, so the
+item retains its teeth.
+
+**Rule going forward: rubric items are statements, never keywords.** Scores are still not
+guaranteed reproducible, but no golden is currently known to flake.
 
 ### 20/20 was reached partly by adjusting the scorer
 
@@ -140,8 +185,10 @@ All 13 planned steps are done or explicitly substituted. What remains, in priori
 
 **1. ~~Break the eval's circularity.~~ DONE 2026-08-12.** A second corpus of
 independently-sourced reviews now lives in the `web-research` Pinecone namespace.
-**Authored corpus 20/20; independent corpus 18/20.** Of the two failures one is the known
-judge flake (G19), the other (G07) found a golden encoding a fabricated fact — see below.
+**Authored corpus 18/20; independent corpus 20/20.** The authored corpus is now the lower
+number by design — G07 and G01 were corrected to match real reviews, and the authored data
+contradicts both. Those two are its only failures; the former third (G19) was a rubric bug and
+is fixed.
 
 **2. Make the deployment functional** — step-by-step guide in
 [`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone

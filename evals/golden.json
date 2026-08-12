@@ -11,7 +11,9 @@
     "required_restaurant_slugs": [
       "fl-seoul-plate"
     ],
-    "acceptable_restaurant_slugs": [],
+    "acceptable_restaurant_slugs": [
+      "fl-charcoal-house"
+    ],
     "forbidden_restaurant_slugs": [
       "as-grill-house",
       "ev-kimchi-house"
@@ -19,23 +21,23 @@
     "required_facts": [
       "located in Flushing",
       "cuisine is Korean BBQ",
-      "has at least one entree under $20"
+      "no Korean BBQ in the dataset comes in under $20 a plate — reviewers report all-you-can-eat at about $41 per person"
     ],
-    "golden_answer": "Picnic Garden in Flushing is your best bet — it's Korean BBQ with several entrees under $20, which is unusually affordable for the category. Most Korean BBQ spots run pricier, but Picnic Garden is specifically known for keeping it accessible without skimping on quality.",
+    "golden_answer": "Picnic Garden in Flushing is the most affordable Korean BBQ in the set, but it won't hit $20 a plate — reviewers report all-you-can-eat at around $41 per person, with a 90-minute limit. The other Flushing option, San Soo Kap San, runs higher still, with choice kalbi around $41 a serving. So nothing here meets the under-$20 bar for Korean BBQ; Picnic Garden is simply the closest.",
     "grading_rubric": {
       "must_mention": [
         "Picnic Garden",
         "Flushing",
-        "under $20"
+        "that no Korean BBQ option comes in under $20 a plate"
       ],
       "must_not_claim": [
         "that it's located in Astoria or East Village",
-        "that entrees start above $20"
+        "that Picnic Garden has entrees, a lunch deal, or all-you-can-eat under $20"
       ],
       "must_cite": true
     },
-    "difficulty": "easy",
-    "notes": "Baseline structured filter joining cuisine + neighborhood + price, but the '$20' threshold is not in the schema (priceTier is an abstract 1-4 with no per-item prices), so the dollar figure can only be confirmed from review text. Originally written as expected_route 'sql'; corrected to 'hybrid' after the eval runner showed a sql-only route cannot satisfy this golden's own required_facts. Distractors (as-grill-house, ev-kimchi-house) share cuisine but fail on neighborhood/price."
+    "difficulty": "medium",
+    "notes": "Structured filter joining cuisine + neighborhood + price, but the '$20' threshold is not in the schema (priceTier is an abstract 1-4 with no per-item prices), so the dollar figure can only be confirmed from review text. Originally written as expected_route 'sql'; corrected to 'hybrid' after the eval runner showed a sql-only route cannot satisfy this golden's own required_facts. Distractors (as-grill-house, ev-kimchi-house) share cuisine but fail on neighborhood/price. CORRECTED 2026-08-12: previously required 'at least one entree under $20', satisfiable only because the authored review invented a $17 weekday lunch. Independent reviews put the AYCE at ~$41/person, and the only other Flushing Korean BBQ (San Soo Kap San, tier 4) is dearer, so the honest answer is that the constraint cannot be met. This now tests grounding against an unsatisfiable constraint — the agent must decline the $20 claim while still surfacing the closest option — and is EXPECTED TO FAIL against the authored corpus. Difficulty raised from easy for that reason."
   },
   {
     "id": "G02",
@@ -226,10 +228,10 @@
       "search_opinions"
     ],
     "required_restaurant_slugs": [
-      "fl-noodle-king"
+      "fl-dumpling-house"
     ],
     "acceptable_restaurant_slugs": [
-      "fl-dumpling-house"
+      "fl-noodle-king"
     ],
     "forbidden_restaurant_slugs": [
       "fl-seoul-plate"
@@ -239,20 +241,21 @@
       "reviewers use language like 'hidden gem' or 'local favorite'",
       "reviewers do not describe it as touristy or well-known"
     ],
-    "golden_answer": "Lanzhou Hand Pulled Noodles in Flushing comes up again and again in reviews as a hidden gem — reviewers specifically call out that it feels like a local secret, not a tourist stop. Tian Jin Dumpling House gets some similar 'hidden gem' mentions too, though less consistently. Picnic Garden, by contrast, shows up in reviews as a well-known, frequently-recommended spot, which is the opposite of what you're after.",
+    "golden_answer": "Tian Jin Dumpling House in Flushing is the strongest hidden-gem pick — reviewers describe it as buried in the basement of the Golden Shopping Mall, completely unassuming and genuinely hard to find. Lanzhou Hand Pulled Noodles is a reasonable second, though reviewers praise the noodles and the price rather than framing it as under-the-radar. Picnic Garden, by contrast, is a well-known all-you-can-eat spot where reservations are recommended, which is the opposite of what you're after.",
     "grading_rubric": {
       "must_mention": [
-        "Lanzhou Hand Pulled Noodles",
+        "Tian Jin Dumpling House",
         "Flushing",
         "hidden gem"
       ],
       "must_not_claim": [
-        "that Picnic Garden is a hidden gem or under-the-radar"
+        "that Picnic Garden is a hidden gem or under-the-radar",
+        "that Lanzhou Hand Pulled Noodles is the strongest or most hidden-gem pick in Flushing"
       ],
       "must_cite": true
     },
     "difficulty": "hard",
-    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Tian Jin Dumpling House) that should be acceptable but not required — tests calibrated precision rather than a binary right/wrong match."
+    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Lanzhou Hand Pulled Noodles) that may be mentioned but must not be ranked first — tests calibrated precision rather than a binary right/wrong match. CORRECTED 2026-08-12: this golden previously required Lanzhou, which was only ever true because the authored review asserted it. Independent reviews give Lanzhou no hidden-gem framing and describe Tian Jin as buried in a basement and hard to find. The second must_not_claim is what makes this golden discriminate: must_mention alone passed on both corpora, because the authored-corpus agent led with Lanzhou and name-checked Tian Jin only as an aside. This golden is EXPECTED TO FAIL against the authored corpus — that failure is the fabricated review being wrong, not the agent."
   },
   {
     "id": "G08",
@@ -658,9 +661,8 @@
     "golden_answer": "I can only speak to NYC — specifically East Village, Flushing, Williamsburg, Harlem, and Astoria — so I can't recommend anything in Tokyo. If you want a ramen fix closer to home, Momofuku Noodle Bar in the East Village is a solid pick with counter seating and good reviews.",
     "grading_rubric": {
       "must_mention": [
-        "NYC",
-        "can't",
-        "Tokyo"
+        "that it cannot recommend anywhere in Tokyo",
+        "that its coverage is New York City — naming NYC, New York, or the five NYC neighborhoods it covers all satisfy this"
       ],
       "must_not_claim": [
         "a specific Tokyo restaurant recommendation"
@@ -668,7 +670,7 @@
       "must_cite": true
     },
     "difficulty": "medium",
-    "notes": "Out-of-scope-city request. Tests that the agent states scope clearly rather than attempting to answer from general knowledge, while still redirecting usefully within scope."
+    "notes": "Out-of-scope-city request. Tests that the agent states scope clearly rather than attempting to answer from general knowledge, while still redirecting usefully within scope. REWRITTEN 2026-08-12: must_mention was previously the bare tokens ['NYC', \"can't\", 'Tokyo']. Bare tokens invite the judge to grade literally even though its instructions say to grade meaning, and this golden flaked in both directions on identical input — passing when the judge read 'NYC' semantically, failing when it demanded the literal string from an answer that had listed the five NYC neighborhoods. Note that naming those neighborhoods already satisfies this golden's own required_facts, so the literal-token demand was stricter than the golden asked for. The items are now propositions, matching the style used everywhere else in this file."
   },
   {
     "id": "G20",

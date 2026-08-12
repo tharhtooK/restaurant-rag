@@ -1,10 +1,17 @@
-import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses";
+import type {
+  ResponseFunctionToolCall,
+  ResponseInput,
+  ResponseInputItem,
+} from "openai/resources/responses/responses";
 import { getOpenAI } from "@/lib/openai";
+import { getLogger } from "@/lib/logger";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { toolDefinitions, runTool } from "./tools";
 
 const MODEL = "gpt-5.6-terra";
 const MAX_TOOL_ITERATIONS = 8;
+
+const log = getLogger("agent");
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -19,26 +26,52 @@ export type AgentResult = {
   toolCalls: ToolCallRecord[];
 };
 
+function buildInput(userMessage: string, history: ChatTurn[]): ResponseInput {
+  const turns = history.map(
+    (turn): ResponseInputItem => ({ role: turn.role, content: turn.content }),
+  );
+  return [...turns, { role: "user", content: userMessage }];
+}
+
+async function executeToolCall(call: ResponseFunctionToolCall): Promise<ToolCallRecord> {
+  let args: unknown;
+  try {
+    args = JSON.parse(call.arguments);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    log.warn("tool arguments were not valid JSON", { tool: call.name, reason });
+    return {
+      name: call.name,
+      input: call.arguments,
+      output: JSON.stringify({
+        error: `Arguments were not valid JSON (${reason}): ${call.arguments}`,
+      }),
+    };
+  }
+
+  const started = Date.now();
+  const output = await runTool(call.name, args);
+  log.debug("tool call finished", {
+    tool: call.name,
+    ms: Date.now() - started,
+    bytes: output.length,
+  });
+  return { name: call.name, input: args, output };
+}
+
 export async function runAgent(userMessage: string, history: ChatTurn[] = []): Promise<AgentResult> {
   const toolCalls: ToolCallRecord[] = [];
-
-  const input: ResponseInput = [
-    ...history.map(
-      (h): ResponseInputItem => ({
-        role: h.role,
-        content: h.content,
-      }),
-    ),
-    { role: "user", content: userMessage },
-  ];
+  const input = buildInput(userMessage, history);
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const started = Date.now();
     const response = await getOpenAI().responses.create({
       model: MODEL,
       instructions: SYSTEM_PROMPT,
       tools: toolDefinitions,
       input,
     });
+    log.debug("model responded", { model: MODEL, iteration, ms: Date.now() - started });
 
     const functionCalls = response.output.filter((item) => item.type === "function_call");
 
@@ -51,23 +84,16 @@ export async function runAgent(userMessage: string, history: ChatTurn[] = []): P
     input.push(...(response.output as unknown as ResponseInputItem[]));
 
     for (const call of functionCalls) {
-      let args: unknown = {};
-      try {
-        args = JSON.parse(call.arguments);
-      } catch {
-        // leave args as {} - runTool's zod validation will report the problem
-      }
-      const output = await runTool(call.name, args);
-      toolCalls.push({ name: call.name, input: args, output });
-
-      input.push({
-        type: "function_call_output",
-        call_id: call.call_id,
-        output,
-      });
+      const record = await executeToolCall(call);
+      toolCalls.push(record);
+      input.push({ type: "function_call_output", call_id: call.call_id, output: record.output });
     }
   }
 
+  log.warn("hit the tool iteration ceiling", {
+    limit: MAX_TOOL_ITERATIONS,
+    toolCalls: toolCalls.length,
+  });
   return {
     text: "I wasn't able to finish looking that up in a reasonable number of steps - could you try rephrasing?",
     toolCalls,
