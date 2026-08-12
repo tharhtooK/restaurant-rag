@@ -18,6 +18,17 @@ eval tractable:
   search over review prose
 - **One router + tool-calling agent** — not a multi-agent system
 
+**Scope is enforced by the system prompt and by what is in the data, not by the
+tool schema.** The `neighborhood` argument was a `z.enum` of the five until
+2026-08-12; it is now a plain string, so the agent can ask for anywhere and gets
+an empty result rather than a validation error. Seeding a sixth neighborhood no
+longer requires editing a constant in `src/lib/agent/tools.ts`. The refusal
+behaviour that G18/G19/G20 grade is unchanged — it always came from the prompt.
+
+Postgres matches `neighborhood` case-insensitively because nothing pins the
+casing any more. Pinecone metadata filters cannot do the same, so `search_opinions`
+still needs the canonical spelling, which the system prompt supplies.
+
 The goal is not "a chatbot that answers about restaurants." It is a system whose
 answers are **graded against a golden set**, where a regression shows up as a
 number. Anything that makes the eval less meaningful is a bug, even if the app
