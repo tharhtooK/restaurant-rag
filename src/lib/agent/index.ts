@@ -1,25 +1,16 @@
-import OpenAI from "openai";
 import type { ResponseInput, ResponseInputItem } from "openai/resources/responses/responses";
+import { getOpenAI } from "@/lib/openai";
 import { SYSTEM_PROMPT } from "./system-prompt";
 import { toolDefinitions, runTool } from "./tools";
 
 const MODEL = "gpt-5.6-terra";
 const MAX_TOOL_ITERATIONS = 8;
 
-// Lazy singleton: importing this module must not throw just because no API
-// key is configured yet - only actually running the agent should.
-let client: OpenAI | null = null;
-function getClient(): OpenAI {
-  if (!client) client = new OpenAI();
-  return client;
-}
-
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 export type ToolCallRecord = {
   name: string;
   input: unknown;
-  /** Raw JSON string the tool returned. Used by the eval runner to inspect retrieval. */
   output: string;
 };
 
@@ -42,7 +33,7 @@ export async function runAgent(userMessage: string, history: ChatTurn[] = []): P
   ];
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-    const response = await getClient().responses.create({
+    const response = await getOpenAI().responses.create({
       model: MODEL,
       instructions: SYSTEM_PROMPT,
       tools: toolDefinitions,

@@ -1,5 +1,5 @@
 import { Pinecone } from "@pinecone-database/pinecone";
-import OpenAI from "openai";
+import { getOpenAI } from "@/lib/openai";
 
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
@@ -15,7 +15,6 @@ export type ReviewVectorMetadata = {
 // Lazy singletons: importing this module must not throw when credentials are
 // absent - only actually using the clients should.
 let pinecone: Pinecone | null = null;
-let openai: OpenAI | null = null;
 
 export function getPineconeIndex() {
   if (!pinecone) {
@@ -26,11 +25,6 @@ export function getPineconeIndex() {
   const indexName = process.env.PINECONE_INDEX;
   if (!indexName) throw new Error("PINECONE_INDEX is not set");
   return pinecone.index<ReviewVectorMetadata>(indexName);
-}
-
-function getOpenAI(): OpenAI {
-  if (!openai) openai = new OpenAI();
-  return openai;
 }
 
 export async function embed(texts: string[]): Promise<number[][]> {

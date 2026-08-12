@@ -1,6 +1,6 @@
-import OpenAI from "openai";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
+import { getOpenAI } from "../src/lib/openai";
 import type { Golden } from "./types";
 
 /**
@@ -33,14 +33,8 @@ const VerdictSchema = z.object({
 
 export type Verdict = z.infer<typeof VerdictSchema>;
 
-let client: OpenAI | null = null;
-function getClient(): OpenAI {
-  if (!client) client = new OpenAI();
-  return client;
-}
-
 export async function judge(golden: Golden, answer: string): Promise<Verdict> {
-  const response = await getClient().responses.parse({
+  const response = await getOpenAI().responses.parse({
     model: JUDGE_MODEL,
     instructions:
       "You grade a restaurant assistant's answer against a rubric. Judge meaning, not wording: " +
