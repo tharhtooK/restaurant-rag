@@ -56,7 +56,17 @@ Prisma 7 no longer auto-generates the client after `migrate dev` — run `prisma
 
 ## Deployment
 
-Production: **https://restaurant-dgzsm6qei-thar5.vercel.app/**
+Production: **https://restaurant-rag.vercel.app/**
+
+(Use that alias, not a `restaurant-<hash>-<scope>.vercel.app` URL — those are
+immutable per-deployment links frozen at the build that produced them, so they
+never pick up later pushes.)
+
+> **The deployed agent is not functional yet.** No environment variables are
+> configured in Vercel, so `/api/chat` returns a credentials error. It also needs
+> a hosted Postgres — `DATABASE_URL` currently points at the Docker-internal
+> `db:5432`. Pinecone is already hosted and populated. Run locally with
+> `docker compose up` for a working system.
 
 This repo is connected to Vercel with the default Next.js build settings (`next build`, no custom install/output overrides). Every push to `main` deploys to production, and every pull request gets its own preview URL posted automatically.
 

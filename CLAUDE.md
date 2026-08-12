@@ -204,6 +204,14 @@ Cal.com, Retell — a "medical-notes" project). Confirmed intentional. It is
 gitignored, but real keys sit in this working directory. `LANGSMITH_PROJECT`
 must be set to `restaurant-rag`, or traces land in that other project.
 
-**Unresolved:** Prisma vs. drizzle (the original sketch specified drizzle; the
-project runs on Prisma) and the monorepo split (`python-scraper/` +
-`nextjs-rag/` was planned; this is a flat repo).
+**Decided: Prisma only.** The original architecture sketch specified drizzle;
+that is superseded. Do not introduce drizzle or a second ORM.
+
+**Unresolved:** the monorepo split (`python-scraper/` + `nextjs-rag/` was
+planned; this is a flat repo).
+
+**The deployed app is not functional.** `restaurant-rag.vercel.app` serves the
+UI, but `/api/chat` returns a credentials error — Vercel has no environment
+variables set, and `DATABASE_URL` points at the Docker-internal `db:5432`, so a
+hosted Postgres is needed before the agent can run in production. Pinecone is
+already hosted and populated. Local (`docker compose up`) is the working system.

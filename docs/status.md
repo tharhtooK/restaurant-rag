@@ -1,6 +1,6 @@
 # Project Status — restaurant-rag
 
-_Last updated: 2026-08-11_
+_Last updated: 2026-08-12_
 
 Capstone scope: NYC, 5 neighborhoods (East Village, Flushing, Williamsburg, Harlem, Astoria),
 ~20 restaurants. Retrieval over Postgres (structured) + semantic search over review prose.
@@ -23,14 +23,23 @@ Against the planned order of operations:
 | 9 | embed + upsert | ✅ done | [`scripts/ingest/embed-upsert.ts`](../scripts/ingest/embed-upsert.ts) — 36 chunks in Pinecone |
 | 10 | tools | ✅ done | [`src/lib/tools/`](../src/lib/tools) — 3 tools |
 | 11 | agent | ✅ done | [`src/lib/agent/`](../src/lib/agent) — OpenAI Responses API |
-| 12 | eval harness | ❌ **not started** | `evals/golden.json` exists; no runner |
-| 13 | failure loop | ❌ blocked | depends on 12 |
+| 12 | eval harness | ✅ done | [`evals/runner.ts`](../evals/runner.ts) — scores route / retrieval / rubric |
+| 13 | failure loop | ✅ done | 16/20 → 20/20; see commit `a1cf268` for the attribution |
 
 **Working today:** ask a question in the browser → agent selects tools → Postgres → grounded
 answer, rendered as markdown. Local stack is `docker compose up` (Next.js + Postgres 16).
 
-**Deployed:** the scaffold is on Vercel and builds green, but the agent path has never run
-there — no environment variables are configured in Vercel.
+**Eval: 20/20** (route 20/20, retrieval 20/20, rubric 20/20), ~35s for a full run. Read that
+number with the circularity caveat below — it measures plumbing, not retrieval quality.
+
+**Deployed:** `https://restaurant-rag.vercel.app/` serves the UI and builds green, but the
+agent path does not work there — Vercel has no environment variables set, and `DATABASE_URL`
+points at the Docker-internal `db:5432`, so a hosted Postgres is required before `/api/chat`
+can run in production. Pinecone is already hosted and populated.
+
+Note the earlier `restaurant-<hash>-<scope>.vercel.app` link documented in the README was an
+immutable per-deployment URL frozen at the scaffold build; it never picked up later pushes.
+Corrected 2026-08-12.
 
 ## Architecture as built
 
@@ -64,12 +73,8 @@ _Resolved 2026-08-11:_ Pinecone was previously unused, with the `vector` route s
 Postgres full-text search. It is now real (Steps 8–9), so all 10 `vector`/`hybrid` goldens are
 graded against the retrieval path the design actually specifies.
 
-One divergence was **never explicitly decided** and should be:
-
-3. **Prisma vs. drizzle.** The architecture sketch specifies `db/schema.ts # drizzle`, but the
-   project runs on Prisma, carried forward from an earlier instruction that predates the sketch.
-   If drizzle is a real requirement, migrating is cheaper now than after more code
-   accumulates on top of Prisma.
+_Resolved 2026-08-12:_ **Prisma only.** The architecture sketch specified drizzle; that is
+superseded. Do not introduce a second ORM.
 
 ## Known problems
 
@@ -83,12 +88,19 @@ about retrieval quality**, because the question and the haystack share an author
 This is acceptable for validating the harness. It is not acceptable as an evaluation result,
 and should not be reported as one.
 
-### "All goldens pass" is not a measurement
+### The judge is non-deterministic
 
-16 of 20 goldens have been exercised end-to-end through the agent and checked by eye. There is
-still no score, no pass/fail record, and no automation. **Never run end-to-end: G03, G04, G10,
-G14.** (Retrieval for those four has been spot-checked at the tool level, but not through the
-agent.) Step 12 replaces all of this with an actual number.
+`must_mention` / `must_not_claim` are graded by an LLM judge, because both are semantic rather
+than literal ("don't have" is satisfied by "that isn't in my data"). G19 failed one run and
+passed the next on identical input. **Treat any score as ±1 item.** Run the suite several times
+before defending a specific number.
+
+### 20/20 was reached partly by adjusting the scorer
+
+Attribution, recorded so the number is not over-read: 16/20 baseline, +2 from real agent fixes,
++2 from golden corrections (the test was wrong — G01 demanded a fact the schema cannot express;
+G06 required "live music" for a restaurant that has a DJ), and +1 from a route-scoring
+correction. Six negative controls confirm the route rule still rejects genuine routing misses.
 
 ### Pinecone is eventually consistent
 
@@ -106,18 +118,21 @@ directory.
 
 ## Next steps
 
-Steps 8–9 are done, so the sequence is now **12 → 13**, with the semantic path already real.
+All 13 planned steps are done or explicitly substituted. What remains, in priority order:
 
-**1. Build the eval runner (Step 12).** Run all 20 goldens and check:
+**1. Break the eval's circularity.** The single largest threat to the result meaning anything.
+Even a handful of reviews sourced independently of the goldens would turn 20/20 from "the
+plumbing works" into a claim about retrieval quality.
 
-- `expected_route` vs. the tools the agent actually called
-- `required_restaurant_slugs` present / `forbidden_restaurant_slugs` absent in retrieved results
-- `grading_rubric.must_mention` / `must_not_claim` against the answer text
+**2. Make the deployment functional**, if a live demo matters. Needs a hosted Postgres
+(Neon/Supabase/Vercel Postgres) plus `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+`PINECONE_API_KEY`, `PINECONE_INDEX`, and the `LANGSMITH_*` vars set in Vercel, then a migrate
++ seed + embed against that database. Pinecone needs nothing further.
 
-Output a per-item table plus an overall pass rate. This converts hand-verification into a
-number and is a precondition for Step 13's failure loop.
+**3. Point `LANGSMITH_PROJECT` at `restaurant-rag`** in `.env` — it currently reads
+`medical-notes`, so traces land in another project's workspace.
 
-**2. Failure loop (Step 13).** Depends on 1.
+**4. Decide the monorepo split** (`python-scraper/` + `nextjs-rag/`) or formally drop it.
 
 ### Infrastructure (verified 2026-08-11)
 
@@ -132,7 +147,6 @@ number and is a precondition for Step 13's failure loop.
 
 ### Open decisions
 
-- **Prisma vs. drizzle** — settle before more code lands on Prisma.
-- **Eval circularity** — even a small set of reviews sourced independently of the goldens would
-  make the Step 12 numbers mean something. Worth doing before 12, not after. This is now the
-  single largest threat to the credibility of the final eval result.
+- **Monorepo split** — implement or formally drop.
+- **Does the deployed demo need to work?** Determines whether hosted Postgres is worth the
+  time.
