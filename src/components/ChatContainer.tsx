@@ -34,8 +34,12 @@ export function ChatContainer() {
 
       const data = await response.json();
       const content = response.ok && data.text ? data.text : "Sorry, I hit an error answering that. Try again?";
+      const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : undefined;
 
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content }]);
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "assistant", content, toolCalls },
+      ]);
     } catch {
       setMessages((prev) => [
         ...prev,

@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { ToolCallRecord } from "@/lib/agent";
 import { MessageBubble, type MessageRole } from "./MessageBubble";
+import { ToolCallList } from "./ToolCallList";
 
 export type ChatMessage = {
   id: string;
   role: MessageRole;
   content: string;
+  toolCalls?: ToolCallRecord[];
 };
 
 type MessageListProps = {
@@ -25,7 +28,10 @@ export function MessageList({ messages, isThinking }: MessageListProps) {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex flex-col gap-6 py-6">
         {messages.map((message) => (
-          <MessageBubble key={message.id} role={message.role} content={message.content} />
+          <div key={message.id} className="flex flex-col gap-2">
+            {message.toolCalls && <ToolCallList calls={message.toolCalls} />}
+            <MessageBubble role={message.role} content={message.content} />
+          </div>
         ))}
         {isThinking && (
           <div className="flex items-center gap-1.5" aria-hidden="true">
