@@ -70,15 +70,19 @@ docker compose exec web npm run lint
 
 ```bash
 # eval (the important one)
-docker compose exec web npx tsx evals/runner.ts          # all 20 goldens
+docker compose exec web npx tsx evals/runner.ts          # authored corpus  -> 20/20
 docker compose exec web npx tsx evals/runner.ts G01 G05  # a subset
+
+# against independently-sourced reviews — this is the number that means something
+docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts   # -> 18/20
 ```
 
 ```bash
 # data
 docker compose exec web npx prisma migrate dev --name <name>
 docker compose exec web npx prisma db seed
-docker compose exec web npx tsx scripts/ingest/embed-upsert.ts   # re-embed to Pinecone
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts                # all -> default ns
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts web-research   # independent only
 docker compose exec db psql -U app -d restaurant_rag
 ```
 
@@ -142,6 +146,12 @@ No comment should restate the line below it.
 parking, or wait-time fields. Do not add them. Their absence is what makes the
 refusal goldens (G16/G17/G20) gradable instead of untested.
 
+**Never write review content to make a golden pass.** That is how the eval became
+circular in the first place. New review text belongs in
+`prisma/seed-data-independent.ts`, sourced from what real reviewers say, chosen
+without reference to what the goldens need. If a golden fails against real data,
+the golden is the more likely thing to be wrong.
+
 Other rules: no `any` (use `unknown` + a zod parse); zod schemas are the single
 source of truth for tool args (reused for both JSON Schema and runtime
 validation); tools return provider-agnostic types — nothing in `src/lib/tools/`
@@ -149,11 +159,22 @@ should import an LLM SDK.
 
 ## State
 
-**Eval: 20/20.** Route 20/20, retrieval 20/20, rubric 20/20. ~35s for a full run.
+**Eval: 20/20 authored corpus, 18/20 independent corpus.** ~35s per run.
 
-Path there: 16/20 baseline → +2 real agent fixes → +2 golden corrections (the
-test was wrong) → +1 scorer correction. Recorded in `docs/status.md`, because a
-100% that involved adjusting the scorer deserves scrutiny.
+Quote the **18/20**. The authored reviews were written to satisfy the goldens'
+`required_facts`, so scoring against them measures plumbing. The independent
+corpus (`web-research` namespace) was sourced from real review content gathered
+without consulting the goldens, so it grades retrieval.
+
+Path to 20/20 on the authored corpus: 16/20 baseline → +2 real agent fixes → +2
+golden corrections (the test was wrong) → +1 scorer correction. Recorded in
+`docs/status.md`, because a 100% that involved adjusting the scorer deserves
+scrutiny.
+
+The independent run also found that **real data contradicts several goldens** —
+most sharply G07, where the golden requires Lanzhou as the "hidden gem" purely
+because the authored review said so, while real reviews point clearly at Tian
+Jin Dumpling House. Details in `docs/status.md`.
 
 ### How we got here
 

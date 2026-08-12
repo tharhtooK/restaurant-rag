@@ -20,7 +20,7 @@ Against the planned order of operations:
 | 6 | postgres schema | ✅ done | [`prisma/schema.prisma`](../prisma/schema.prisma) |
 | 7 | normalize + load | ◐ partial | [`prisma/seed.ts`](../prisma/seed.ts) loads; no raw→normalized stage exists because there is no raw |
 | 8 | chunk | ✅ done | no-op at current size — each 1–3 sentence review is already a chunk |
-| 9 | embed + upsert | ✅ done | [`scripts/ingest/embed-upsert.ts`](../scripts/ingest/embed-upsert.ts) — 36 chunks in Pinecone |
+| 9 | embed + upsert | ✅ done | [`scripts/ingest/embed-upsert.ts`](../scripts/ingest/embed-upsert.ts) — 59 chunks across 2 namespaces |
 | 10 | tools | ✅ done | [`src/lib/tools/`](../src/lib/tools) — 3 tools |
 | 11 | agent | ✅ done | [`src/lib/agent/`](../src/lib/agent) — OpenAI Responses API |
 | 12 | eval harness | ✅ done | [`evals/runner.ts`](../evals/runner.ts) — scores route / retrieval / rubric |
@@ -29,13 +29,13 @@ Against the planned order of operations:
 **Working today:** ask a question in the browser → agent selects tools → Postgres → grounded
 answer, rendered as markdown. Local stack is `docker compose up` (Next.js + Postgres 16).
 
-**Eval: 20/20** (route 20/20, retrieval 20/20, rubric 20/20), ~35s for a full run. Read that
-number with the circularity caveat below — it measures plumbing, not retrieval quality.
+**Eval: 20/20 on the authored corpus, 18/20 on independently-sourced reviews.** ~35s per run.
+The 18/20 is the meaningful number — it grades retrieval against data the goldens did not
+author. See the circularity section below.
 
 **Deployed:** `https://restaurant-rag.vercel.app/` serves the UI and builds green, but the
-agent path does not work there — Vercel has no environment variables set, and `DATABASE_URL`
-points at the Docker-internal `db:5432`, so a hosted Postgres is required before `/api/chat`
-can run in production. Pinecone is already hosted and populated.
+agent path does not work there — no Vercel environment variables, and `DATABASE_URL` points at
+the Docker-internal `db:5432`. Step-by-step fix in [`docs/deployment.md`](deployment.md).
 
 Note the earlier `restaurant-<hash>-<scope>.vercel.app` link documented in the README was an
 immutable per-deployment URL frozen at the scaffold build; it never picked up later pushes.
@@ -78,15 +78,33 @@ superseded. Do not introduce a second ORM.
 
 ## Known problems
 
-### The eval is circular (most important)
+### The eval's circularity — largely addressed 2026-08-12
 
-Review text was authored specifically to satisfy each golden's `required_facts`, and the
-goldens were then verified against those same reviews. **Passing goldens demonstrates that the
-plumbing works — routing, tool selection, SQL correctness, refusal behavior — and says nothing
-about retrieval quality**, because the question and the haystack share an author.
+The original review text was authored to satisfy each golden's `required_facts`, making a
+score against it a measure of plumbing rather than retrieval. There is now a second corpus,
+sourced from web research on what real reviewers say and gathered without consulting the
+goldens, isolated in the `web-research` Pinecone namespace:
 
-This is acceptable for validating the harness. It is not acceptable as an evaluation result,
-and should not be reported as one.
+```bash
+docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts
+```
+
+**Authored 20/20 → independent 18/20.** Residual bias is documented in
+`prisma/seed-data-independent.ts`: the themes were still selected and written by someone who
+had read the goldens. Weakened substantially, not eliminated.
+
+### Real data contradicts several goldens
+
+Surfaced by the independent corpus, unresolved:
+
+- **G07** asks which Flushing spot is the biggest hidden gem. The golden requires Lanzhou,
+  because the authored review said so. Real reviews give Lanzhou no hidden-gem framing at all
+  and describe Tian Jin Dumpling House as "buried in the basement", "completely unassuming",
+  "genuinely hard to find". The agent picked Tian Jin. **The golden is probably backwards.**
+- **G01** requires "at least one entree under $20" at Picnic Garden. Real reviews report AYCE
+  at ~$41/person. That fact was satisfiable only because it was authored.
+- **Manna's** price is contested in real reviews; the authored set called it plainly affordable.
+- **Fette Sau has closed.** G14 and G20 reference it.
 
 ### The judge is non-deterministic
 
@@ -120,14 +138,14 @@ directory.
 
 All 13 planned steps are done or explicitly substituted. What remains, in priority order:
 
-**1. Break the eval's circularity.** The single largest threat to the result meaning anything.
-Even a handful of reviews sourced independently of the goldens would turn 20/20 from "the
-plumbing works" into a claim about retrieval quality.
+**1. ~~Break the eval's circularity.~~ DONE 2026-08-12.** A second corpus of
+independently-sourced reviews now lives in the `web-research` Pinecone namespace.
+**Authored corpus 20/20; independent corpus 18/20.** Of the two failures one is the known
+judge flake (G19), the other (G07) found a golden encoding a fabricated fact — see below.
 
-**2. Make the deployment functional**, if a live demo matters. Needs a hosted Postgres
-(Neon/Supabase/Vercel Postgres) plus `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
-`PINECONE_API_KEY`, `PINECONE_INDEX`, and the `LANGSMITH_*` vars set in Vercel, then a migrate
-+ seed + embed against that database. Pinecone needs nothing further.
+**2. Make the deployment functional** — step-by-step guide in
+[`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone
+is already done. **Not started.**
 
 **3. Point `LANGSMITH_PROJECT` at `restaurant-rag`** in `.env` — it currently reads
 `medical-notes`, so traces land in another project's workspace.
