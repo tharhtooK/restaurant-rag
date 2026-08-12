@@ -13,10 +13,15 @@ export type FilterRestaurantsInput = {
   opensBy?: string;
 };
 
-function buildWhere(input: FilterRestaurantsInput): Prisma.RestaurantWhereInput {
+export function buildWhere(input: FilterRestaurantsInput): Prisma.RestaurantWhereInput {
   const where: Prisma.RestaurantWhereInput = {};
 
-  if (input.neighborhood) where.neighborhood = input.neighborhood;
+  // Matched case-insensitively because the tool schema accepts any string: with
+  // no enum pinning the casing, "east village" would otherwise return nothing
+  // rather than the East Village rows.
+  if (input.neighborhood) {
+    where.neighborhood = { equals: input.neighborhood, mode: "insensitive" };
+  }
   if (input.cuisine) where.cuisine = { contains: input.cuisine, mode: "insensitive" };
   if (input.vegetarianFriendly !== undefined) where.vegetarianFriendly = input.vegetarianFriendly;
 

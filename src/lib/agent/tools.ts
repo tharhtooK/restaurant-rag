@@ -4,10 +4,8 @@ import { filterRestaurants } from "@/lib/tools/filter-restaurants";
 import { searchOpinions } from "@/lib/tools/search-opinions";
 import { getRestaurantDetails } from "@/lib/tools/get-restaurant-details";
 
-const NEIGHBORHOODS = ["East Village", "Flushing", "Williamsburg", "Harlem", "Astoria"] as const;
-
 const filterRestaurantsSchema = z.object({
-  neighborhood: z.enum(NEIGHBORHOODS).optional(),
+  neighborhood: z.string().optional(),
   cuisine: z.string().optional(),
   priceTierMin: z.number().int().min(1).max(4).optional(),
   priceTierMax: z.number().int().min(1).max(4).optional(),
@@ -18,7 +16,7 @@ const filterRestaurantsSchema = z.object({
 
 const searchOpinionsSchema = z.object({
   query: z.string(),
-  neighborhood: z.enum(NEIGHBORHOODS).optional(),
+  neighborhood: z.string().optional(),
   restaurantSlugs: z.array(z.string()).optional(),
 });
 

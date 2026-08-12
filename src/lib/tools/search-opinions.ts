@@ -33,6 +33,12 @@ export type OpinionMatch = {
   score: number;
 };
 
+/**
+ * Pinecone metadata filters are exact and case-sensitive, with no equivalent of
+ * Postgres' insensitive mode, so a neighborhood whose casing does not match what
+ * was upserted returns nothing. The canonical spellings are in the system prompt,
+ * which is where the model gets them.
+ */
 export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, unknown> | null {
   const filters: Record<string, unknown>[] = [];
   if (input.neighborhood) filters.push({ neighborhood: { $eq: input.neighborhood } });
