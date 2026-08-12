@@ -171,18 +171,24 @@ should import an LLM SDK.
 
 ## State
 
-**Eval: 18/20 authored corpus, 20/20 independent corpus.** ~35s per run.
+**Eval: 17/20 authored corpus, 20/20 independent corpus.** ~35s per run.
 
 Quote the **independent number**. The authored reviews were written to satisfy
 the goldens' `required_facts`, so scoring against them measures plumbing. The
 independent corpus (`web-research` namespace) was sourced from real review
 content gathered without consulting the goldens, so it grades retrieval.
 
-**The authored corpus now scores lower on purpose.** G07 was corrected on
-2026-08-12 to encode what real reviews say (Tian Jin Dumpling House is the
-Flushing hidden gem, not Lanzhou). The authored corpus asserts the opposite, so
-it fails that golden — and that failure is the fabricated review being wrong,
-not the agent. A golden that passes against fabricated data is not doing its job.
+**The authored corpus now scores lower on purpose.** G07 and G01 were corrected
+on 2026-08-12 to encode what real reviews say — Tian Jin Dumpling House is the
+Flushing hidden gem rather than Lanzhou, and no Korean BBQ in the set comes in
+under $20 (the authored "$17 weekday lunch" was invented). The authored corpus
+asserts the opposite in both cases, so it fails both goldens, and those failures
+are the fabricated reviews being wrong, not the agent. A golden that passes
+against fabricated data is not doing its job.
+
+**The 3-point gap between the corpora is now the useful signal**, not either
+number alone: two of those points are measured fabrication in the authored
+reviews, one is the G19 judge flake.
 
 Treat both numbers as ±1: the judge is non-deterministic and G19 has flaked in
 both directions on identical input. The deterministic checks are the stable

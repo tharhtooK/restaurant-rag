@@ -89,8 +89,10 @@ goldens, isolated in the `web-research` Pinecone namespace:
 docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts
 ```
 
-**Authored 18/20 → independent 20/20** (as of the G07 correction below; before it, authored
-20/20 → independent 18/20). Residual bias is documented in
+**Authored 17/20 → independent 20/20** (after the G07 and G01 corrections below; before them,
+authored 20/20 → independent 18/20). The 3-point gap is the useful signal: two points are
+measured fabrication in the authored reviews, one is the G19 judge flake. Residual bias is
+documented in
 `prisma/seed-data-independent.ts`: the themes were still selected and written by someone who
 had read the goldens. Weakened substantially, not eliminated.
 
@@ -110,9 +112,16 @@ Surfaced by the independent corpus:
   *strongest* pick is what makes the golden discriminate. It now fails on the authored corpus
   and passes on the independent one, which is the correct shape: a golden that passes against
   fabricated data is not testing anything.
-- **G01** requires "at least one entree under $20" at Picnic Garden. Real reviews report AYCE
-  at ~$41/person. That fact was satisfiable only because it was authored. **Unresolved** — the
-  same treatment as G07 would apply.
+- **G01 — RESOLVED 2026-08-12.** Required "at least one entree under $20" at Picnic Garden,
+  satisfiable only because the authored review invented a $17 weekday lunch. Real reviews put
+  the all-you-can-eat at ~$41/person, and the only other Flushing Korean BBQ (San Soo Kap San)
+  is tier 4 and dearer still — so **no restaurant in the dataset can satisfy the query**.
+
+  Rather than delete the golden, it was inverted into a grounding test: the agent must decline
+  the under-$20 claim while still surfacing the closest option. On the independent corpus it
+  answers "I don't have a Flushing Korean BBQ option with plates under $20... reviews put its
+  all-you-can-eat at about $41 per person", which is exactly the target behaviour. On the
+  authored corpus it cites the fabricated $17 lunch and fails. Difficulty raised easy → medium.
 - **Manna's** price is contested in real reviews; the authored set called it plainly affordable.
 - **Fette Sau has closed.** G14 and G20 reference it. This is a dataset-freshness question
   rather than a wrong golden, so it is left alone deliberately.
@@ -151,9 +160,9 @@ All 13 planned steps are done or explicitly substituted. What remains, in priori
 
 **1. ~~Break the eval's circularity.~~ DONE 2026-08-12.** A second corpus of
 independently-sourced reviews now lives in the `web-research` Pinecone namespace.
-**Authored corpus 18/20; independent corpus 20/20.** The authored corpus is now the lower
-number by design — G07 was corrected to match real reviews, and the authored data contradicts
-it. Its other failure is the known judge flake (G19).
+**Authored corpus 17/20; independent corpus 20/20.** The authored corpus is now the lower
+number by design — G07 and G01 were corrected to match real reviews, and the authored data
+contradicts both. Its third failure is the known judge flake (G19).
 
 **2. Make the deployment functional** — step-by-step guide in
 [`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone

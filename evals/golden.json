@@ -11,7 +11,9 @@
     "required_restaurant_slugs": [
       "fl-seoul-plate"
     ],
-    "acceptable_restaurant_slugs": [],
+    "acceptable_restaurant_slugs": [
+      "fl-charcoal-house"
+    ],
     "forbidden_restaurant_slugs": [
       "as-grill-house",
       "ev-kimchi-house"
@@ -19,23 +21,23 @@
     "required_facts": [
       "located in Flushing",
       "cuisine is Korean BBQ",
-      "has at least one entree under $20"
+      "no Korean BBQ in the dataset comes in under $20 a plate — reviewers report all-you-can-eat at about $41 per person"
     ],
-    "golden_answer": "Picnic Garden in Flushing is your best bet — it's Korean BBQ with several entrees under $20, which is unusually affordable for the category. Most Korean BBQ spots run pricier, but Picnic Garden is specifically known for keeping it accessible without skimping on quality.",
+    "golden_answer": "Picnic Garden in Flushing is the most affordable Korean BBQ in the set, but it won't hit $20 a plate — reviewers report all-you-can-eat at around $41 per person, with a 90-minute limit. The other Flushing option, San Soo Kap San, runs higher still, with choice kalbi around $41 a serving. So nothing here meets the under-$20 bar for Korean BBQ; Picnic Garden is simply the closest.",
     "grading_rubric": {
       "must_mention": [
         "Picnic Garden",
         "Flushing",
-        "under $20"
+        "that no Korean BBQ option comes in under $20 a plate"
       ],
       "must_not_claim": [
         "that it's located in Astoria or East Village",
-        "that entrees start above $20"
+        "that Picnic Garden has entrees, a lunch deal, or all-you-can-eat under $20"
       ],
       "must_cite": true
     },
-    "difficulty": "easy",
-    "notes": "Baseline structured filter joining cuisine + neighborhood + price, but the '$20' threshold is not in the schema (priceTier is an abstract 1-4 with no per-item prices), so the dollar figure can only be confirmed from review text. Originally written as expected_route 'sql'; corrected to 'hybrid' after the eval runner showed a sql-only route cannot satisfy this golden's own required_facts. Distractors (as-grill-house, ev-kimchi-house) share cuisine but fail on neighborhood/price."
+    "difficulty": "medium",
+    "notes": "Structured filter joining cuisine + neighborhood + price, but the '$20' threshold is not in the schema (priceTier is an abstract 1-4 with no per-item prices), so the dollar figure can only be confirmed from review text. Originally written as expected_route 'sql'; corrected to 'hybrid' after the eval runner showed a sql-only route cannot satisfy this golden's own required_facts. Distractors (as-grill-house, ev-kimchi-house) share cuisine but fail on neighborhood/price. CORRECTED 2026-08-12: previously required 'at least one entree under $20', satisfiable only because the authored review invented a $17 weekday lunch. Independent reviews put the AYCE at ~$41/person, and the only other Flushing Korean BBQ (San Soo Kap San, tier 4) is dearer, so the honest answer is that the constraint cannot be met. This now tests grounding against an unsatisfiable constraint — the agent must decline the $20 claim while still surfacing the closest option — and is EXPECTED TO FAIL against the authored corpus. Difficulty raised from easy for that reason."
   },
   {
     "id": "G02",
