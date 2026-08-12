@@ -89,22 +89,33 @@ goldens, isolated in the `web-research` Pinecone namespace:
 docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts
 ```
 
-**Authored 20/20 → independent 18/20.** Residual bias is documented in
+**Authored 18/20 → independent 20/20** (as of the G07 correction below; before it, authored
+20/20 → independent 18/20). Residual bias is documented in
 `prisma/seed-data-independent.ts`: the themes were still selected and written by someone who
 had read the goldens. Weakened substantially, not eliminated.
 
 ### Real data contradicts several goldens
 
-Surfaced by the independent corpus, unresolved:
+Surfaced by the independent corpus:
 
-- **G07** asks which Flushing spot is the biggest hidden gem. The golden requires Lanzhou,
-  because the authored review said so. Real reviews give Lanzhou no hidden-gem framing at all
-  and describe Tian Jin Dumpling House as "buried in the basement", "completely unassuming",
-  "genuinely hard to find". The agent picked Tian Jin. **The golden is probably backwards.**
+- **G07 — RESOLVED 2026-08-12.** Asks which Flushing spot is the biggest hidden gem. The
+  golden required Lanzhou, because the authored review said so. Real reviews give Lanzhou no
+  hidden-gem framing at all and describe Tian Jin Dumpling House as "buried in the basement",
+  "completely unassuming", "genuinely hard to find". The golden was backwards and has been
+  swapped: Tian Jin is now required, Lanzhou acceptable.
+
+  Swapping `required` and `must_mention` alone was **not** enough — it passed on both corpora,
+  because the authored-corpus agent still led with Lanzhou and name-checked Tian Jin as an
+  aside, which satisfies a mention check. A second `must_not_claim` forbidding Lanzhou as the
+  *strongest* pick is what makes the golden discriminate. It now fails on the authored corpus
+  and passes on the independent one, which is the correct shape: a golden that passes against
+  fabricated data is not testing anything.
 - **G01** requires "at least one entree under $20" at Picnic Garden. Real reviews report AYCE
-  at ~$41/person. That fact was satisfiable only because it was authored.
+  at ~$41/person. That fact was satisfiable only because it was authored. **Unresolved** — the
+  same treatment as G07 would apply.
 - **Manna's** price is contested in real reviews; the authored set called it plainly affordable.
-- **Fette Sau has closed.** G14 and G20 reference it.
+- **Fette Sau has closed.** G14 and G20 reference it. This is a dataset-freshness question
+  rather than a wrong golden, so it is left alone deliberately.
 
 ### The judge is non-deterministic
 
@@ -140,8 +151,9 @@ All 13 planned steps are done or explicitly substituted. What remains, in priori
 
 **1. ~~Break the eval's circularity.~~ DONE 2026-08-12.** A second corpus of
 independently-sourced reviews now lives in the `web-research` Pinecone namespace.
-**Authored corpus 20/20; independent corpus 18/20.** Of the two failures one is the known
-judge flake (G19), the other (G07) found a golden encoding a fabricated fact — see below.
+**Authored corpus 18/20; independent corpus 20/20.** The authored corpus is now the lower
+number by design — G07 was corrected to match real reviews, and the authored data contradicts
+it. Its other failure is the known judge flake (G19).
 
 **2. Make the deployment functional** — step-by-step guide in
 [`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone

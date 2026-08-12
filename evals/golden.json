@@ -226,10 +226,10 @@
       "search_opinions"
     ],
     "required_restaurant_slugs": [
-      "fl-noodle-king"
+      "fl-dumpling-house"
     ],
     "acceptable_restaurant_slugs": [
-      "fl-dumpling-house"
+      "fl-noodle-king"
     ],
     "forbidden_restaurant_slugs": [
       "fl-seoul-plate"
@@ -239,20 +239,21 @@
       "reviewers use language like 'hidden gem' or 'local favorite'",
       "reviewers do not describe it as touristy or well-known"
     ],
-    "golden_answer": "Lanzhou Hand Pulled Noodles in Flushing comes up again and again in reviews as a hidden gem — reviewers specifically call out that it feels like a local secret, not a tourist stop. Tian Jin Dumpling House gets some similar 'hidden gem' mentions too, though less consistently. Picnic Garden, by contrast, shows up in reviews as a well-known, frequently-recommended spot, which is the opposite of what you're after.",
+    "golden_answer": "Tian Jin Dumpling House in Flushing is the strongest hidden-gem pick — reviewers describe it as buried in the basement of the Golden Shopping Mall, completely unassuming and genuinely hard to find. Lanzhou Hand Pulled Noodles is a reasonable second, though reviewers praise the noodles and the price rather than framing it as under-the-radar. Picnic Garden, by contrast, is a well-known all-you-can-eat spot where reservations are recommended, which is the opposite of what you're after.",
     "grading_rubric": {
       "must_mention": [
-        "Lanzhou Hand Pulled Noodles",
+        "Tian Jin Dumpling House",
         "Flushing",
         "hidden gem"
       ],
       "must_not_claim": [
-        "that Picnic Garden is a hidden gem or under-the-radar"
+        "that Picnic Garden is a hidden gem or under-the-radar",
+        "that Lanzhou Hand Pulled Noodles is the strongest or most hidden-gem pick in Flushing"
       ],
       "must_cite": true
     },
     "difficulty": "hard",
-    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Tian Jin Dumpling House) that should be acceptable but not required — tests calibrated precision rather than a binary right/wrong match."
+    "notes": "Purely subjective sentiment judgment with a genuine near-miss (Lanzhou Hand Pulled Noodles) that may be mentioned but must not be ranked first — tests calibrated precision rather than a binary right/wrong match. CORRECTED 2026-08-12: this golden previously required Lanzhou, which was only ever true because the authored review asserted it. Independent reviews give Lanzhou no hidden-gem framing and describe Tian Jin as buried in a basement and hard to find. The second must_not_claim is what makes this golden discriminate: must_mention alone passed on both corpora, because the authored-corpus agent led with Lanzhou and name-checked Tian Jin only as an aside. This golden is EXPECTED TO FAIL against the authored corpus — that failure is the fabricated review being wrong, not the agent."
   },
   {
     "id": "G08",
