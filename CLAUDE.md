@@ -79,7 +79,7 @@ docker compose logs -f web
 # checks — run all three before every commit
 docker compose exec web npx tsc --noEmit
 docker compose exec web npm run lint
-docker compose exec web npm test           # 46 unit tests, ~0.2s, no network
+docker compose exec web npm test           # 105 unit tests, ~0.4s, no network
 ```
 
 ```bash
@@ -121,6 +121,13 @@ src/lib/agent/
   index.ts                  manual tool-calling loop over the Responses API
   tools.ts                  zod schemas -> JSON Schema defs + runtime validation
   system-prompt.ts          scope, refusal rules, price-tier legend
+src/lib/                  on-demand crawl — none of it reachable from the agent
+  coverage.ts               "do we know this neighborhood?" — one COUNT
+  crawl-offer.ts            pure: is there a crawlable neighborhood in this turn?
+  crawl-trigger.ts          the single gate between a neighborhood and money
+  crawl-limits.ts           daily cap + 24h miss memory, in-process
+  crawler.ts                client for the crawler service, zod at the boundary
+  import-crawl.ts           crawl payload -> Restaurant + Review rows
 scripts/ingest/
   embed-upsert.ts           chunk + embed + upsert reviews
 evals/
@@ -135,6 +142,7 @@ tests/                    node:test + tsx, no new dependency
   search-filter.test.ts     Pinecone metadata filter branching
   logger.test.ts            level filtering and field formatting
 docs/
+  README.md                 index — every doc has a status; half are DESIGN ONLY
   taxonomy.md               6 query categories
   data-manifest.md          slug -> real restaurant mapping
   status.md                 running project status
@@ -169,6 +177,13 @@ No comment should restate the line below it.
 **Absence of data is a feature.** The schema deliberately has no reservations,
 parking, or wait-time fields. Do not add them. Their absence is what makes the
 refusal goldens (G16/G17/G20) gradable instead of untested.
+
+**The crawl trigger lives in the route, never in the agent.** `/api/chat` decides
+whether a turn starts a crawl; nothing in `src/lib/agent/` may import
+`crawl-trigger.ts` or `crawl-offer.ts`. `evals/runner.ts` calls `runAgent`
+directly, so this is the only thing stopping an eval run from spending money —
+G19 ("best ramen shop in tokyo") now calls `filter_restaurants` with
+`neighborhood: "Tokyo"`, and would crawl on every run if the trigger moved.
 
 **Never write review content to make a golden pass.** That is how the eval became
 circular in the first place. New review text belongs in
@@ -306,6 +321,23 @@ explicitly "noisy room" snippet above one about quieter midweek visits.
 At 20 restaurants a 20-candidate pool is most of the namespace, so the reranker
 is effectively doing retrieval rather than refining it. Fine here; not what the
 design would look like at scale.
+
+**Crawled rows land in the table the eval reads.** Shipped 2026-08-13: a chat turn
+that finds nothing asks for a neighborhood, and naming one crawls it. There is no
+`dataset` column — specced, then cut for simplicity — so an ordinary chat turn can
+change the eval's input. A Bushwick crawl during development took the table from 22
+rows to 25; both corpora were re-run and unmoved (18/20 authored, 20/20 independent),
+but only because Bushwick appears in no golden. **Re-run both corpora after any
+crawl** until the `dataset` column exists. The vector path is already isolated —
+crawled reviews go to the `crawled` namespace, which the eval never reads.
+
+**The prompt must look before it refuses.** `SYSTEM_PROMPT` now tells the agent to
+call `filter_restaurants` with an unrecognised neighborhood and use the empty result
+as confirmation before declaring it out of scope. This is load-bearing, not stylistic:
+crawl detection reads the neighborhood out of tool-call arguments, and while the
+prompt refused from its own list the agent called no tool at all, so the crawl could
+never fire. It also aligns the prompt with the enum removal in
+`feat/unrestricted-neighborhood`, which had intended this since 2026-08-12.
 
 **Decided: Prisma only.** The original architecture sketch specified drizzle;
 that is superseded. Do not introduce drizzle or a second ORM.

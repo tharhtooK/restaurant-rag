@@ -1,6 +1,6 @@
 # Project Status — restaurant-rag
 
-_Last updated: 2026-08-12_
+> **Status** Living · running project status · **Updated** 2026-08-13
 
 Capstone scope: NYC, 5 neighborhoods (East Village, Flushing, Williamsburg, Harlem, Astoria),
 ~20 restaurants. Retrieval over Postgres (structured) + semantic search over review prose.
@@ -20,7 +20,7 @@ Against the planned order of operations:
 | 6 | postgres schema | ✅ done | [`prisma/schema.prisma`](../prisma/schema.prisma) |
 | 7 | normalize + load | ◐ partial | [`prisma/seed.ts`](../prisma/seed.ts) loads; no raw→normalized stage exists because there is no raw |
 | 8 | chunk | ✅ done | no-op at current size — each 1–3 sentence review is already a chunk |
-| 9 | embed + upsert | ✅ done | [`scripts/ingest/embed-upsert.ts`](../scripts/ingest/embed-upsert.ts) — 59 chunks across 2 namespaces |
+| 9 | embed + upsert | ✅ done | [`scripts/ingest/embed-upsert.ts`](../scripts/ingest/embed-upsert.ts) — 84 chunks across 3 namespaces |
 | 10 | tools | ✅ done | [`src/lib/tools/`](../src/lib/tools) — 3 tools |
 | 11 | agent | ✅ done | [`src/lib/agent/`](../src/lib/agent) — OpenAI Responses API |
 | 12 | eval harness | ✅ done | [`evals/runner.ts`](../evals/runner.ts) — scores route / retrieval / rubric |
@@ -28,6 +28,10 @@ Against the planned order of operations:
 
 **Working today:** ask a question in the browser → agent selects tools → Postgres → grounded
 answer, rendered as markdown. Local stack is `docker compose up` (Next.js + Postgres 16).
+
+**Also working since 2026-08-13:** a lookup that finds nothing asks which neighborhood, and
+naming one crawls it live with progress in the thread, then offers to re-answer the original
+question. No crawl button — see the on-demand crawl section below.
 
 **Eval: 18/20 on the authored corpus, 20/20 on independently-sourced reviews.** ~35s per run.
 The independent number is the meaningful one — it grades retrieval against data the goldens did
@@ -56,19 +60,35 @@ src/lib/
   pinecone.ts             Pinecone + embedding clients (lazy singletons)
   db.ts                   Prisma client (lazy singleton)
   logger.ts               leveled stderr logger, Node stdlib only
+  coverage.ts             "do we know this neighborhood?" — one COUNT
+  crawl-offer.ts          pure: is there a crawlable neighborhood in this turn?
+  crawl-trigger.ts        the single gate between a neighborhood and money
+  crawl-limits.ts         daily cap + 24h miss memory, in-process
+  crawler.ts              client for the crawler service, zod at the boundary
+  import-crawl.ts         crawl payload -> Restaurant + Review rows
 src/lib/agent/
   index.ts                manual tool-calling loop, OpenAI Responses API (gpt-5.6-terra)
   tools.ts                zod schemas → JSON Schema tool defs + runtime arg validation
   system-prompt.ts        scope, refusal behavior, price-tier legend
 scripts/ingest/
   embed-upsert.ts         chunk + embed + upsert reviews to Pinecone
+  import-crawl.ts         CLI wrapper: import a crawl job by id, or from a file
+scripts/
+  pinecone-stats.ts       per-namespace record counts, no embedding call
 evals/
   runner.ts               orchestration + CLI only
   scoring.ts              route / retrieval / rubric checks — pure, unit-tested
   report.ts               console output + results file
   judge.ts                LLM-as-judge for the rubric
-tests/                  node:test + tsx — 46 tests, no network, no new dependency
-src/app/api/chat/route.ts POST endpoint
+tests/                  node:test + tsx — 105 tests, no network, no new dependency
+src/app/api/
+  chat/route.ts           POST endpoint; also decides whether a turn starts a crawl
+  crawl/route.ts          POST: start a crawl, behind the guardrails
+  crawl/[jobId]/route.ts  GET: poll, then import + embed once on success
+  neighborhoods/route.ts  GET: the neighborhoods we already have, for the chips
+src/components/
+  NeighborhoodAsk.tsx     "which neighborhood?" + chips, shown on an empty lookup
+  CrawlProgress.tsx       passive inline progress; not a control
 ```
 
 ## Divergences from the original plan
@@ -172,6 +192,54 @@ ranking — a "quiet" restaurant topping a "loud party" query. The identical che
 once the index settled. **Do not measure retrieval immediately after an upsert**; this will
 matter for the Step 12 runner if it ever re-ingests as part of a test cycle.
 
+### Crawled data lands in the table the eval reads — 2026-08-13
+
+The in-chat crawl shipped today (below). Crawled restaurants go into the same
+`Restaurant` table `filter_restaurants` and `get_restaurant_details` read, so an
+ordinary chat turn can now change the eval's input. There is no `dataset` column
+yet; it was specced and deliberately cut for simplicity.
+
+**This is no longer hypothetical.** A crawl of Bushwick during development took the
+table from 22 rows to 25. Both corpora were re-run afterwards and were unmoved —
+18/20 authored, 20/20 independent, route 20/20, retrieval 20/20 — because Bushwick
+appears in no golden. That is luck about which neighborhood was crawled, not a
+guarantee.
+
+Until the `dataset` column exists, **re-run both corpora after any crawl**. The
+structural protections that do hold:
+
+- a crawl only fires where coverage is 0, so the five seeded neighborhoods cannot
+  receive crawled rows, which protects the 17 goldens that name one;
+- crawled reviews embed into the `crawled` Pinecone namespace, which the eval never
+  reads, so the vector path is already isolated;
+- `evals/runner.ts` calls `runAgent` directly and never touches `/api/chat`, so an
+  eval run cannot itself start a crawl. **Never move the crawl trigger into
+  `src/lib/agent/`** — that property is what stops G19 ("best ramen shop in tokyo")
+  from crawling twenty times a run.
+
+### On-demand crawl, in-chat — shipped 2026-08-13
+
+A lookup that finds nothing asks which neighborhood; naming one starts a crawl with
+progress in the thread; when it lands the user is offered a re-ask with the original
+question pre-filled. **No crawl button and no up-front gate** — consent is naming the
+neighborhood. Design and plan in [`docs/superpowers/`](superpowers/).
+
+The non-obvious part, and the reason the first build silently did nothing: detection
+reads the neighborhood out of tool-call arguments, but `SYSTEM_PROMPT` listed the
+five neighborhoods and told the agent to declare anything else out of scope — so the
+agent refused **without calling a tool at all**. Measured: "any good spots in
+Bushwick?", "any vegan places in Bushwick?", a bare "Bushwick" reply and "best ramen
+shop in tokyo" each produced zero tool calls. Detection could therefore only ever see
+covered neighborhoods, which are exactly the ones a crawl refuses.
+
+The fix was one paragraph in the prompt's Scope section: look the neighborhood up and
+use the empty result as confirmation before refusing. That aligns the prompt with the
+enum removal in `feat/unrestricted-neighborhood`, which had intended this all along.
+
+Consequence: G19 now calls `filter_restaurants` with `neighborhood: "Tokyo"`, so a
+real user asking it spends one crawl. Bounded by the crawler's New York `city`
+default (the job fails and is remembered for 24h) and by `CRAWLS_PER_DAY`.
+
 ### `.env` contains unrelated live credentials
 
 The file holds another project's configuration and live API keys (Pinecone, LangSmith,
@@ -190,20 +258,29 @@ number by design — G07 and G01 were corrected to match real reviews, and the a
 contradicts both. Those two are its only failures; the former third (G19) was a rubric bug and
 is fixed.
 
-**2. Make the deployment functional** — step-by-step guide in
+**2. Add the `dataset` column.** Tag `Restaurant` rows `seed` or `crawled` and scope
+`filter_restaurants` / `get_restaurant_details` by env, mirroring how
+`PINECONE_NAMESPACE` scopes vector search. The app sees everything; the eval sees only
+`seed`. Deferred for simplicity when the crawl shipped, and now the highest-value
+remaining item — see "Crawled data lands in the table the eval reads" above.
+
+**3. Make the deployment functional** — step-by-step guide in
 [`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone
 is already done. **Not started.**
 
-**3. Point `LANGSMITH_PROJECT` at `restaurant-rag`** in `.env` — it currently reads
+**4. Point `LANGSMITH_PROJECT` at `restaurant-rag`** in `.env` — it currently reads
 `medical-notes`, so traces land in another project's workspace.
 
-**4. Decide the monorepo split** (`python-scraper/` + `nextjs-rag/`) or formally drop it.
+**5. Decide the monorepo split** (`python-scraper/` + `nextjs-rag/`) or formally drop it.
 
 ### Infrastructure (verified 2026-08-11)
 
-- **Pinecone index `restaurants`** — 1536 dims, cosine, 36 records. Dedicated to this
-  project (separate from the `medical-notes` and `bible` indexes on the same account).
+- **Pinecone index `restaurants`** — 1536 dims, cosine, 84 records across 3 namespaces
+  (`__default__` 36 authored, `web-research` 23 independent, `crawled` 25). Dedicated to
+  this project (separate from the `medical-notes` and `bible` indexes on the same account).
   Re-ingest with `docker compose exec web npx tsx scripts/ingest/embed-upsert.ts`.
+  Inspect with `docker compose exec web npx tsx scripts/pinecone-stats.ts` — it reads
+  `describeIndexStats`, so it costs no embedding call.
 - **Embeddings** — `text-embedding-3-small`, 1536 dims. Matches the index.
 - **OpenAI traffic routes through a LiteLLM proxy** (`OPENAI_BASE_URL=parsity-litellm.fly.dev`),
   not `api.openai.com` — this applies to agent chat calls and embeddings alike. Note that
