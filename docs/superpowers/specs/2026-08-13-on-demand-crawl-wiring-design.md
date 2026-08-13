@@ -151,8 +151,40 @@ Chips **fill the composer** rather than send, matching the existing
 `handleChipClick`. Every crawl then traces to a message the user chose to send,
 and no "awaiting neighborhood" state machine is needed.
 
-Untouched: the schema, `src/lib/agent/`, `SYSTEM_PROMPT`, `coverage.ts`,
-`crawl-limits.ts`, both crawl routes, and `evals/`.
+Also edited, though v4 wrongly claimed otherwise:
+
+- `src/lib/agent/system-prompt.ts` — see "Detection depends on the prompt" below.
+- `src/app/api/crawl/route.ts` — the coverage-and-guardrail sequence moved to
+  `src/lib/crawl-trigger.ts` so `/api/chat` shares one gate rather than
+  duplicating it. Observable behaviour unchanged.
+
+Untouched: the schema, `coverage.ts`, `crawl-limits.ts`, and `evals/`.
+
+### Detection depends on the prompt
+
+**Reading the neighborhood out of tool arguments is not sufficient on its own,
+and v4 was wrong to assume it was.** `SYSTEM_PROMPT` listed the five
+neighborhoods and told the agent to declare anything else out of scope, so the
+agent refused *without calling any tool*. Measured 2026-08-13: "any good spots in
+Bushwick?", "any vegan places in Bushwick?", a bare "Bushwick" reply and "whats
+the best ramen shop in tokyo" all produced **zero** tool calls.
+
+So `findNeighborhoodInTurn` could only ever see neighborhoods the agent
+considered in scope — which are exactly the covered ones, which
+`startCrawlIfEligible` then correctly refuses. The crawl was unreachable by
+construction.
+
+The fix is one paragraph in the Scope section: call `filter_restaurants` with the
+unknown neighborhood and use the empty result as confirmation before refusing.
+That also matches intent already recorded in `CLAUDE.md` — the enum was removed
+from the tool schema so the agent could ask for anywhere and get an empty result
+rather than a validation error; the prompt had not caught up.
+
+**This is what makes the Tokyo problem real.** Before the change, G19 produced no
+tool call and therefore could not spend. After it, G19 calls
+`filter_restaurants` with `neighborhood: "Tokyo"`. The bounds in that section
+apply, and eval runs still cannot spend because `runner.ts` calls `runAgent`
+directly.
 
 ## Tests
 

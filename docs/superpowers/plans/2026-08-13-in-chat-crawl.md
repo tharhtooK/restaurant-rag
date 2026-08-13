@@ -21,7 +21,7 @@
 - **No new dependencies.** Tests are `node:test` + `tsx`; test files import with relative paths (`../src/lib/...`), source files use the `@/` alias.
 - Comments explain **why**, never what. No comment restates the line below it.
 - ~40 lines per function, ~200 lines per file.
-- Do not touch `prisma/schema.prisma`, `src/lib/agent/`, `evals/`, or `src/lib/coverage.ts`.
+- Do not touch `prisma/schema.prisma`, `evals/`, or `src/lib/coverage.ts`. `src/lib/agent/system-prompt.ts` IS edited (see Task 8) — the crawl cannot fire without it. Nothing else in `src/lib/agent/` changes, and the crawl trigger never moves there.
 - The existing 93 tests must stay green throughout.
 
 ---
@@ -364,7 +364,7 @@ The chips in Task 5 need the neighborhoods we already have. Generated from the d
 **Interfaces:**
 - Produces: `GET /api/neighborhoods` → `{ neighborhoods: string[] }`, consumed by Task 5.
 
-- [ ] **Step 1: Write the route**
+- [X] **Step 1: Write the route**
 
 Create `src/app/api/neighborhoods/route.ts`:
 
@@ -383,7 +383,7 @@ export async function GET() {
 }
 ```
 
-- [ ] **Step 2: Verify it returns what is actually seeded**
+- [X] **Step 2: Verify it returns what is actually seeded**
 
 ```bash
 curl -s localhost:3000/api/neighborhoods
@@ -391,7 +391,7 @@ curl -s localhost:3000/api/neighborhoods
 
 Expected: `{"neighborhoods":["Astoria","East Village","Flushing","Greenpoint","Harlem","Red Hook","Williamsburg"]}`
 
-- [ ] **Step 3: Run the full checks**
+- [X] **Step 3: Run the full checks**
 
 ```bash
 docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint && docker compose exec web npm test
@@ -399,7 +399,7 @@ docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint
 
 Expected: clean, `# pass 105`.
 
-- [ ] **Step 4: Commit**
+- [X] **Step 4: Commit**
 
 ```bash
 git add src/app/api/neighborhoods/route.ts
@@ -430,7 +430,7 @@ The decision table this implements:
 | no | — | yes | `needsNeighborhood` |
 | no | — | no | nothing |
 
-- [ ] **Step 1: Add the imports**
+- [X] **Step 1: Add the imports**
 
 At the top of `src/app/api/chat/route.ts`, after the existing `runAgent` import:
 
@@ -439,7 +439,7 @@ import { findNeighborhoodInTurn, hadEmptyResult } from "@/lib/crawl-offer";
 import { startCrawlIfEligible } from "@/lib/crawl-trigger";
 ```
 
-- [ ] **Step 2: Replace the try block body**
+- [X] **Step 2: Replace the try block body**
 
 Replace lines 48–54 (the `try { ... }` up to and including `return NextResponse.json(result);`) with:
 
@@ -473,7 +473,7 @@ Replace lines 48–54 (the `try { ... }` up to and including `return NextRespons
   } catch (error) {
 ```
 
-- [ ] **Step 3: Verify a covered neighborhood does not crawl**
+- [X] **Step 3: Verify a covered neighborhood does not crawl**
 
 ```bash
 curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '{"message":"anything good in Flushing?"}' | head -c 400
@@ -481,7 +481,7 @@ curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '
 
 Expected: a normal answer with **no** `crawl` and **no** `needsNeighborhood` field.
 
-- [ ] **Step 4: Verify a missing restaurant asks for a neighborhood**
+- [X] **Step 4: Verify a missing restaurant asks for a neighborhood**
 
 ```bash
 curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '{"message":"is Fuzzy Wombat Diner any good?"}' | grep -o '"needsNeighborhood":true'
@@ -489,7 +489,7 @@ curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '
 
 Expected: `"needsNeighborhood":true`.
 
-- [ ] **Step 5: Run the full checks**
+- [X] **Step 5: Run the full checks**
 
 ```bash
 docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint && docker compose exec web npm test
@@ -497,7 +497,7 @@ docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint
 
 Expected: clean, `# pass 105`.
 
-- [ ] **Step 6: Commit**
+- [X] **Step 6: Commit**
 
 ```bash
 git add src/app/api/chat/route.ts
@@ -518,7 +518,7 @@ Renders the question and chips when the response carries `needsNeighborhood`. Ch
 - Consumes: `GET /api/neighborhoods` (Task 3); the `needsNeighborhood` response field (Task 4).
 - Produces: `NeighborhoodAsk` with props `{ neighborhoods: string[]; onPick: (neighborhood: string) => void }`.
 
-- [ ] **Step 1: Write the component**
+- [X] **Step 1: Write the component**
 
 Create `src/components/NeighborhoodAsk.tsx`:
 
@@ -554,7 +554,7 @@ export function NeighborhoodAsk({ neighborhoods, onPick }: NeighborhoodAskProps)
 }
 ```
 
-- [ ] **Step 2: Hold the state in ChatContainer**
+- [X] **Step 2: Hold the state in ChatContainer**
 
 In `src/components/ChatContainer.tsx`, add to the imports:
 
@@ -579,7 +579,7 @@ Add inside `ChatContainer`, after the existing `useState` calls:
   }, []);
 ```
 
-- [ ] **Step 3: Set the flag when the response carries it**
+- [X] **Step 3: Set the flag when the response carries it**
 
 In `handleSend`, immediately after `const toolCalls = ...`:
 
@@ -592,7 +592,7 @@ In `handleSend`, immediately after `const toolCalls = ...`:
       }
 ```
 
-- [ ] **Step 4: Render it**
+- [X] **Step 4: Render it**
 
 In the JSX, replace the `<Composer ... />` line with:
 
@@ -612,13 +612,13 @@ In the JSX, replace the `<Composer ... />` line with:
         />
 ```
 
-- [ ] **Step 5: Verify in the browser**
+- [X] **Step 5: Verify in the browser**
 
 Open `http://localhost:3000`, ask `is Fuzzy Wombat Diner any good?`.
 
 Expected: the answer, then the ask with seven chips. Clicking a chip fills the composer without sending.
 
-- [ ] **Step 6: Run the full checks**
+- [X] **Step 6: Run the full checks**
 
 ```bash
 docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint && docker compose exec web npm test
@@ -626,7 +626,7 @@ docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint
 
 Expected: clean, `# pass 105`.
 
-- [ ] **Step 7: Commit**
+- [X] **Step 7: Commit**
 
 ```bash
 git add src/components/NeighborhoodAsk.tsx src/components/ChatContainer.tsx
@@ -647,7 +647,7 @@ The payoff. Polls the already-built job route, which imports and embeds on succe
 - Consumes: the `crawl` response field (Task 4); `GET /api/crawl/:jobId`, which returns `{ jobId, status, progress? }` while running and `{ jobId, status, imported, restaurants }` on success.
 - Produces: `CrawlProgress` with props `{ neighborhood: string; status: string; completed: number; total: number }`.
 
-- [ ] **Step 1: Write the progress component**
+- [X] **Step 1: Write the progress component**
 
 Create `src/components/CrawlProgress.tsx`:
 
@@ -675,7 +675,7 @@ export function CrawlProgress({ neighborhood, status, completed, total }: CrawlP
 }
 ```
 
-- [ ] **Step 2: Track the pending crawl**
+- [X] **Step 2: Track the pending crawl**
 
 In `src/components/ChatContainer.tsx`, add the import:
 
@@ -702,7 +702,7 @@ Add the state, next to the others:
   const [pendingCrawl, setPendingCrawl] = useState<PendingCrawl | null>(null);
 ```
 
-- [ ] **Step 3: Start tracking when a crawl begins**
+- [X] **Step 3: Start tracking when a crawl begins**
 
 In `handleSend`, next to the `needsNeighborhood` handling from Task 5:
 
@@ -720,7 +720,7 @@ In `handleSend`, next to the `needsNeighborhood` handling from Task 5:
       }
 ```
 
-- [ ] **Step 4: Poll until it finishes**
+- [X] **Step 4: Poll until it finishes**
 
 Add this effect after the `/api/neighborhoods` effect:
 
@@ -777,7 +777,7 @@ Add this effect after the `/api/neighborhoods` effect:
   }, [pendingCrawl]);
 ```
 
-- [ ] **Step 5: Render it**
+- [X] **Step 5: Render it**
 
 Above the `needsNeighborhood` block from Task 5:
 
@@ -874,6 +874,44 @@ State the eval numbers you actually observed. Do not copy the expected numbers f
 git add CLAUDE.md docs/status.md
 git commit -m "Record eval results after wiring the in-chat crawl"
 ```
+
+---
+
+### Task 8: Look up an unknown neighborhood before refusing
+
+**Added 2026-08-13, after Task 6 shipped and the progress display never appeared.** Not in the original plan — it is the prerequisite Tasks 4–6 silently depended on.
+
+**Files:**
+- Modify: `src/lib/agent/system-prompt.ts` (the Scope section)
+
+**Why:** `findNeighborhoodInTurn` reads the neighborhood out of tool arguments, but the prompt listed the five neighborhoods and told the agent to declare anything else out of scope — so the agent refused *without calling a tool*. Detection could only ever see covered neighborhoods, which `startCrawlIfEligible` correctly refuses. The crawl was unreachable by construction and no progress could ever render.
+
+- [X] **Step 1: Confirm the cause by probing the agent directly**
+
+Not through `/api/chat`, so nothing can spend. Observed: `any good spots in Bushwick?`, `any vegan places in Bushwick?`, a bare `Bushwick` reply, and `whats the best ramen shop in tokyo` all returned **zero** tool calls.
+
+- [X] **Step 2: Rewrite the Scope paragraph**
+
+```
+You can only speak to restaurants in those 5 neighborhoods. When someone names a neighborhood that isn't on that list, call filter_restaurants with it before you say anything about scope - what's actually in the dataset decides, not the list above. The empty result is your confirmation. Then say plainly that it's out of scope, and redirect to something you can actually help with in-scope if there's a natural bridge (e.g. same cuisine, similar vibe). This applies to another city too, not just another NYC neighborhood.
+```
+
+- [X] **Step 3: Re-probe**
+
+All four queries now yield a neighborhood, including the bare `Bushwick` reply.
+
+- [X] **Step 4: Re-run both corpora**
+
+Observed: **18/20** authored (G01, G07 — the two documented failures), **20/20** independent, route 20/20, retrieval 20/20. G02 failed once and passed on re-run, matching the flake documented for G09.
+
+- [X] **Step 5: Commit**
+
+```bash
+git add src/lib/agent/system-prompt.ts
+git commit -m "Look up an unknown neighborhood before calling it out of scope"
+```
+
+**Consequence:** this is what makes the Tokyo spend path in the spec real. Before the change G19 produced no tool call and could not spend; now it calls `filter_restaurants` with `neighborhood: "Tokyo"`. Bounded by the crawler's New York city default and the daily cap. Eval runs still cannot spend — `runner.ts` calls `runAgent` directly.
 
 ---
 
