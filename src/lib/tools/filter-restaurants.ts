@@ -1,4 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
+import { datasetWhere } from "@/lib/dataset";
 import { prisma } from "@/lib/db";
 import { matchesHours } from "./hours";
 import { Hours, RestaurantSummary } from "./types";
@@ -14,7 +15,7 @@ export type FilterRestaurantsInput = {
 };
 
 export function buildWhere(input: FilterRestaurantsInput): Prisma.RestaurantWhereInput {
-  const where: Prisma.RestaurantWhereInput = {};
+  const where: Prisma.RestaurantWhereInput = { ...datasetWhere() };
 
   // Matched case-insensitively because the tool schema accepts any string: with
   // no enum pinning the casing, "east village" would otherwise return nothing

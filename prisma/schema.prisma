@@ -41,6 +41,9 @@ model Restaurant {
   vegetarianFriendly Boolean  @default(false)
   dietary            String[] @default([])
   hours              Json
+  /// "seed" or "crawled". The eval reads only "seed", so a crawl started from a
+  /// chat turn cannot change what the goldens are graded against.
+  dataset            String   @default("seed")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -49,6 +52,7 @@ model Restaurant {
   @@index([neighborhood])
   @@index([cuisine])
   @@index([priceTier])
+  @@index([dataset])
 }
 
 model Review {

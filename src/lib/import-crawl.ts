@@ -37,6 +37,7 @@ async function importRestaurant(restaurant: CrawledRestaurant): Promise<Imported
     vegetarianFriendly,
     dietary: restaurant.dietary,
     hours: restaurant.hours,
+    dataset: "crawled",
   };
 
   const row = await prisma.restaurant.upsert({
