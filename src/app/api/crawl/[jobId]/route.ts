@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isImported, markImported, recordMiss } from "@/lib/crawl-limits";
+import { isImported, markImported, recordMiss, releaseImportClaim } from "@/lib/crawl-limits";
 import { getCrawlJob } from "@/lib/crawler";
 import { embedCrawledReviews, importCrawlJob } from "@/lib/import-crawl";
 import { getLogger } from "@/lib/logger";
@@ -31,10 +31,24 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/crawl/[
     });
   }
 
-  // Claimed before the await so two concurrent polls cannot both import.
+  // Claimed before the await so two concurrent polls cannot both import, and
+  // given back on failure so a broken import is retried rather than reported as
+  // done. Keeping the claim after a throw made the next poll answer
+  // imported: true for rows that were never written.
   markImported(jobId);
-  const imported = await importCrawlJob(job);
-  await embedCrawledReviews();
+  let imported;
+  try {
+    imported = await importCrawlJob(job);
+    await embedCrawledReviews();
+  } catch (error) {
+    releaseImportClaim(jobId);
+    log.error("crawl import failed", {
+      jobId,
+      neighborhood: job.neighborhood ?? "",
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
   log.info("crawl imported and embedded", { jobId, restaurants: imported.length });
 
   return NextResponse.json({

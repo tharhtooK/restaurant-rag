@@ -65,3 +65,13 @@ export function isImported(jobId: string): boolean {
 export function markImported(jobId: string): void {
   importedJobs.add(jobId);
 }
+
+/**
+ * Gives the claim back when an import throws.
+ *
+ * Without this a failed import stays claimed, so the next poll takes the
+ * already-imported branch and reports success for rows that were never written.
+ */
+export function releaseImportClaim(jobId: string): void {
+  importedJobs.delete(jobId);
+}

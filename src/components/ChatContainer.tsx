@@ -68,7 +68,10 @@ export function ChatContainer() {
         };
       });
 
-      if (job.status === "succeeded") {
+      // Waits for imported, not just succeeded: the job can succeed at the
+      // crawler while the import into Postgres fails, and announcing the
+      // neighborhood is ready then would be a lie.
+      if (job.status === "succeeded" && job.imported) {
         // Cleared here, not just by the effect re-running, so a poll already in
         // flight cannot append the completion message a second time.
         clearInterval(timer);
