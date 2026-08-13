@@ -12,22 +12,39 @@ rather than asserted**.
 Scope is fixed and load-bearing — narrowness is the point, because it makes the
 eval tractable:
 
-- **NYC, 5 neighborhoods:** East Village, Flushing, Williamsburg, Harlem, Astoria
-- **20 restaurants**, real and verified (see `docs/data-manifest.md`)
+- **NYC, 5 seeded neighborhoods:** East Village, Flushing, Williamsburg, Harlem,
+  Astoria — the corpus the eval is graded against, and the only rows tagged
+  `dataset: "seed"`
+- **20 seeded restaurants**, real and verified (see `docs/data-manifest.md`).
+  Crawling adds more, tagged `crawled` and invisible to the eval
 - **Two retrieval paths:** Postgres for structured facts, Pinecone for semantic
   search over review prose
 - **One router + tool-calling agent** — not a multi-agent system
 
-**Scope is enforced by the system prompt and by what is in the data, not by the
-tool schema.** The `neighborhood` argument was a `z.enum` of the five until
-2026-08-12; it is now a plain string, so the agent can ask for anywhere and gets
-an empty result rather than a validation error. Seeding a sixth neighborhood no
-longer requires editing a constant in `src/lib/agent/tools.ts`. The refusal
-behaviour that G18/G19/G20 grade is unchanged — it always came from the prompt.
+**Scope is enforced by what is in the data.** Not by the tool schema, and since
+2026-08-13 not by a list in the prompt either. Three steps got here:
 
-Postgres matches `neighborhood` case-insensitively because nothing pins the
-casing any more. Pinecone metadata filters cannot do the same, so `search_opinions`
-still needs the canonical spelling, which the system prompt supplies.
+1. the `neighborhood` argument was a `z.enum` of the five until 2026-08-12; it is
+   now a plain string, so the agent can ask for anywhere and gets an empty result
+   rather than a validation error;
+2. the prompt now tells the agent to **look a neighborhood up before saying
+   anything about scope** — without this the crawl could never fire, because the
+   agent refused unknown neighborhoods without calling a tool at all;
+3. the prompt no longer asserts "5 neighborhoods" or "20 restaurants". It cannot:
+   `RESTAURANT_DATASET` makes the true answer differ between the eval (5 and 20)
+   and the app (8 and 25, after crawling Bushwick, Greenpoint and Red Hook). A
+   coverage question is answered by calling `filter_restaurants`, not from memory.
+
+The five names remain in the prompt for one reason only: `search_opinions` needs
+canonical spellings because Pinecone metadata filters cannot match
+case-insensitively. Postgres matches `neighborhood` case-insensitively, so the SQL
+path does not care.
+
+The refusal behaviour G18/G19/G20 grade is unchanged in outcome — an out-of-scope
+place is still refused, now with a lookup behind the refusal rather than a list.
+
+Both rules are load-bearing rather than stylistic; the failure each one prevents is
+recorded under Known Problems.
 
 The goal is not "a chatbot that answers about restaurants." It is a system whose
 answers are **graded against a golden set**, where a regression shows up as a
@@ -342,13 +359,22 @@ uncovered and gets crawled again on the next visit.
 The vector path was already isolated: crawled reviews go to the `crawled` namespace,
 which the eval never reads.
 
-**The prompt must look before it refuses.** `SYSTEM_PROMPT` now tells the agent to
-call `filter_restaurants` with an unrecognised neighborhood and use the empty result
-as confirmation before declaring it out of scope. This is load-bearing, not stylistic:
-crawl detection reads the neighborhood out of tool-call arguments, and while the
-prompt refused from its own list the agent called no tool at all, so the crawl could
-never fire. It also aligns the prompt with the enum removal in
+**The prompt must look before it refuses.** `SYSTEM_PROMPT` tells the agent to call
+`filter_restaurants` with an unrecognised neighborhood and use the empty result as
+confirmation before declaring it out of scope. Load-bearing, not stylistic: crawl
+detection reads the neighborhood out of tool-call arguments, and while the prompt
+refused from its own list the agent called no tool at all, so the crawl could never
+fire. It also aligns the prompt with the enum removal in
 `feat/unrestricted-neighborhood`, which had intended this since 2026-08-12.
+
+**The prompt must not recite a neighborhood list or a restaurant count.** Fixed on
+2026-08-13, when "what neighborhoods do you cover?" answered "East Village,
+Flushing, Williamsburg, Harlem, and Astoria" with no tool call, omitting all three
+crawled neighborhoods. No hardcoded number can be right: `RESTAURANT_DATASET` makes
+the true answer 5 and 20 for the eval but 8 and 25 for the app. Coverage questions
+are answered by calling `filter_restaurants` with no filters. Verified in both
+scopes — put a list back and the agent will be wrong in whichever context you were
+not thinking about.
 
 **Decided: Prisma only.** The original architecture sketch specified drizzle;
 that is superseded. Do not introduce drizzle or a second ORM.

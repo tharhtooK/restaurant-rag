@@ -262,6 +262,14 @@ The fix was one paragraph in the prompt's Scope section: look the neighborhood u
 use the empty result as confirmation before refusing. That aligns the prompt with the
 enum removal in `feat/unrestricted-neighborhood`, which had intended this all along.
 
+**A second prompt problem followed from the first.** With crawling live, the opening
+line — "exactly 5 NYC neighborhoods" and "20 restaurants total" — was false for the
+app, and "what neighborhoods do you cover?" recited the five with no tool call,
+omitting Bushwick, Greenpoint and Red Hook. No hardcoded number can be correct now
+that `RESTAURANT_DATASET` exists: the eval sees 5 and 20, the app sees 8 and 25. The
+prompt no longer asserts counts and answers coverage questions from
+`filter_restaurants`. Verified in both scopes; both corpora unchanged.
+
 Consequence: G19 now calls `filter_restaurants` with `neighborhood: "Tokyo"`, so a
 real user asking it spends one crawl. Bounded by the crawler's New York `city`
 default (the job fails and is remembered for 24h) and by `CRAWLS_PER_DAY`.
