@@ -1,13 +1,16 @@
-# On-demand crawl — wiring the existing backend to the UI
+# On-demand crawl — in-chat, no crawl button
 
-> **Status** Design · **not built** · **Updated** 2026-08-13 · **Version** v2
+> **Status** Design · **not built** · **Updated** 2026-08-13 · **Version** v3
 
-Implements the consumer half of [`on-demand-crawl.md`](../../on-demand-crawl.md)
-and Phase 1 + Step 8 of [`crawl-integration-plan.md`](../../crawl-integration-plan.md),
-with three decisions those docs left open now closed and one of their decisions
-deliberately overridden.
+Implements the consumer half of [`on-demand-crawl.md`](../../on-demand-crawl.md).
+The crawl happens **inside the conversation**: a lookup comes back empty, the
+assistant asks which neighborhood, the crawl runs with progress in the thread,
+and when it lands the user is asked whether to look again.
 
 **The rule is unchanged: check Postgres first, never crawl what we already have.**
+
+v3 replaces the up-front neighborhood gate and the crawl button from v1/v2. Both
+are gone.
 
 ---
 
@@ -23,25 +26,22 @@ Commit `4dd1ba3` built the whole spending side:
 | Payload validation | `src/lib/crawler.ts` | built — zod at the network boundary |
 | Import | `src/lib/import-crawl.ts`, `scripts/ingest/import-crawl.ts` | built |
 
-**Nothing calls any of it.** There is no `/api/neighborhoods`, no gate, no
-button, and `/api/chat` never checks coverage. This spec is the ignition, not
-the engine.
+**Nothing calls any of it.** This spec is the ignition, not the engine.
 
-The crawler service itself is also real, despite `crawler-service-spec.md` still
-reading *Status: Design · not built* — `4dd1ba3` was verified against a live
-crawl. Treat its §3 API as a shipped contract, not a proposal.
+The crawler service is also real, despite `crawler-service-spec.md` still reading
+*Status: Design · not built* — `4dd1ba3` was verified against a live crawl. Treat
+its §3 API as a shipped contract.
 
 ## Decisions closed here
 
-1. **Trigger point.** Both an up-front gate *and* a reactive offer after an empty
-   turn. `on-demand-crawl.md` §3 specified only the gate.
-2. **Eval isolation.** The `dataset` column, deferred in `on-demand-crawl.md` §8,
-   is **undeferred**. Rationale in §1.
-3. **Crawl unit stays the neighborhood.** Not a free-text query, not a restaurant
-   name. Rationale in §2.
-4. **Coverage becomes a threshold, not `> 0`.** This **overrides**
-   `on-demand-crawl.md` §1, which explicitly refused a thin-coverage tier.
-   Rationale and the honest cost in §2.
+1. **Eval isolation.** The `dataset` column, deferred in `on-demand-crawl.md` §8,
+   is **undeferred** (§1).
+2. **Crawl unit stays the neighborhood** — not a query or a restaurant name (§2).
+3. **Coverage becomes a threshold, not `> 0`.** Overrides `on-demand-crawl.md`
+   §1 (§2).
+4. **No user-facing crawl control.** Overrides `on-demand-crawl.md` §2 and §3 —
+   there is no button and no up-front gate. Consent is the user naming a
+   neighborhood in conversation (§4).
 
 ---
 
@@ -49,30 +49,28 @@ crawl. Treat its §3 API as a shipped contract, not a proposal.
 
 ### Why now
 
-`on-demand-crawl.md` §8 deferred this on the grounds that crawled rows land in
-the `Restaurant` table the eval reads. That was tolerable while crawling meant
-running a script deliberately. This spec puts a button in the UI, so the eval's
-input becomes mutable by anyone clicking it. `CLAUDE.md`: *anything that makes
+`on-demand-crawl.md` §8 deferred this because crawled rows land in the
+`Restaurant` table the eval reads. That was tolerable while crawling meant
+running a script deliberately. Here a crawl fires from a chat turn, so the
+eval's input becomes mutable by ordinary use. `CLAUDE.md`: *anything that makes
 the eval less meaningful is a bug, even if the app still works.*
 
-The exposure is narrower than §8 feared, but not zero:
+Exposure, precisely:
 
-- The coverage guard only permits a crawl below the threshold, and the five
-  seeded neighborhoods are all well above it, so they **cannot receive crawled
-  rows**. That structurally protects the 17 goldens that name a neighborhood.
+- The coverage guard only permits a crawl below the threshold, and all five
+  seeded neighborhoods sit well above it, so they **cannot receive crawled
+  rows**. That structurally protects the 17 goldens naming a neighborhood.
 - The vector path is already isolated — crawled reviews go to the `crawled`
   namespace; the eval reads `default` and `web-research`.
-- Of the three goldens with no neighborhood in the query, G16 (reservations) and
-  G20 (wait time) grade on fields the schema deliberately lacks, so crawled rows
-  cannot reach them.
-- **G19 is live.** `POST /api/crawl` accepts any non-empty string and
-  `getCoverage("Tokyo")` returns 0, so a demo crawl of "Tokyo" writes Tokyo
-  restaurants into the eval's table and makes G19's out-of-scope refusal wrong.
+- Of the three goldens with no neighborhood, G16 (reservations) and G20 (wait
+  time) grade on fields the schema deliberately lacks, so crawled rows cannot
+  reach them.
+- **G19 ("best ramen shop in tokyo") is the live one.** See §7 — it is why the
+  crawl trigger must live in the route and never in the agent.
 
-Fixing G19 by rejecting non-NYC crawl targets would mean a server-side
-allowlist — reintroducing exactly the hardcoded list that
-`feat/unrestricted-neighborhood` removed. Scoping the eval is the fix that does
-not walk that back.
+Rejecting non-NYC crawl targets would mean a server-side allowlist,
+reintroducing the hardcoded list `feat/unrestricted-neighborhood` removed.
+Scoping the eval is the fix that does not walk that back.
 
 ### Schema
 
@@ -87,18 +85,17 @@ model Restaurant {
 
 ### Migration and backfill
 
-`DEFAULT 'seed'` alone is **wrong** for the current database. Live state today is
-20 seeded rows plus two already-crawled ones, which the default would mislabel
-into the eval's view:
+`DEFAULT 'seed'` alone is **wrong** for the current database. Live state is 20
+seeded rows plus two already-crawled ones, which the default would mislabel into
+the eval's view:
 
 ```
  Astoria 4 | East Village 4 | Flushing 5 | Harlem 3 | Williamsburg 4
  Greenpoint 1 | Red Hook 1        <- crawled by 4dd1ba3
 ```
 
-Both crawled rows are identifiable by their review source (`gr-karczma` and
-`re-hometown-bar-b-que`, 5 `crawled:%` reviews each, 0 other reviews), so the
-migration backfills:
+Both crawled rows are identifiable by review source (`gr-karczma` and
+`re-hometown-bar-b-que`, 5 `crawled:%` reviews each, 0 others):
 
 ```sql
 UPDATE "Restaurant" SET dataset = 'crawled'
@@ -106,8 +103,8 @@ WHERE id IN (SELECT DISTINCT "restaurantId" FROM "Review" WHERE source LIKE 'cra
 ```
 
 **Known gap:** a crawled restaurant with zero reviews would stay `'seed'`. None
-exists today. The verification step below is what catches it if one ever does —
-do not assume the backfill was complete, check it.
+exists today. §9 step 2 is what catches it if one ever does — do not assume the
+backfill was complete, check it.
 
 `prisma/seed.ts` sets `dataset: "seed"` explicitly rather than leaning on the
 column default, so a future default change cannot silently reclassify the corpus.
@@ -122,38 +119,36 @@ export function datasetWhere(): { dataset?: string }
 ```
 
 Reads `RESTAURANT_DATASET`. Unset returns `{}`, so the app sees everything.
-
 Applied in `buildWhere()` (`filter-restaurants.ts`) and `getRestaurantDetails()`.
 
-**Not applied in `getCoverage()`.** Coverage decides whether to spend money, and
-it must count crawled rows — otherwise a neighborhood we just fetched reads as
-uncovered and gets crawled again on the next visit.
+**Not applied in `getCoverage()`** — coverage decides whether to spend and must
+count crawled rows, or a neighborhood we just fetched reads as uncovered and gets
+crawled again.
 
 `evals/runner.ts` sets `process.env.RESTAURANT_DATASET ??= "seed"` at the top
-rather than depending on a CLI flag. An env var you have to remember to pass is a
+rather than depending on a CLI flag. An env var you must remember to pass is a
 contaminated eval waiting to happen; `??=` still allows a deliberate override.
 
 ## 2. Crawl granularity and the coverage threshold
 
 ### The crawl unit stays the neighborhood
 
-`POST /crawl` in the crawler contract takes `neighborhood` (required), `city`,
-`limit`, `maxReviewsPerRestaurant`, `sources`. There is no query or
-restaurant-name parameter, so query-driven crawling is a cross-repo API change,
-not a change here. It is also the wrong shape:
+`POST /crawl` takes `neighborhood` (required), `city`, `limit`,
+`maxReviewsPerRestaurant`, `sources`. No query or name parameter, so
+query-driven crawling is a cross-repo API change. It is also the wrong shape:
 
 - **Coverage is only cheaply answerable per neighborhood.** `getCoverage()` is a
-  `COUNT`. "Do we already have data for *cheap korean bbq*?" has no equivalent
-  without judging whether existing rows are good enough.
-- **Queries are an infinite key space.** In-flight dedup and the daily cap both
-  assume a finite set of targets. Two phrasings of one need become two crawls.
+  `COUNT`; "do we have data for *cheap korean bbq*?" has no equivalent without
+  judging whether existing rows are good enough.
+- **Queries are an infinite key space.** Dedup and the daily cap both assume a
+  finite set of targets.
 - **Crawls amortize.** One Greenpoint crawl answers every future Greenpoint
-  question; a query crawl answers one question.
+  question.
 - **Slugs are neighborhood-prefixed by contract** (`bw-robertas`) and must be
   stable across re-crawls.
 
-The eval is *not* a reason here — once §1 lands, a query crawl returning a
-Flushing restaurant would be tagged `crawled` and stay out of the eval's view.
+The eval is *not* a reason here — once §1 lands, a query crawl's results would be
+tagged `crawled` and stay out of the eval's view.
 
 ### Why `> 0` is not enough
 
@@ -163,18 +158,17 @@ Live data shows the cost of `on-demand-crawl.md` §1's "one row is enough":
  Greenpoint 1 | Red Hook 1
 ```
 
-`getCoverage("Greenpoint")` returns `hasData: true`, so under that rule
-Greenpoint can **never be crawled again**. Every Greenpoint question beyond that
-one restaurant fails permanently and no button ever appears.
+Under that rule Greenpoint can **never be crawled again**, so every Greenpoint
+question beyond its single restaurant fails permanently.
 
-§1 rejected a thin-coverage tier because *"deciding whether existing data is good
-enough is a judgement call, and judgement calls are where cost and complexity
-leak in."* That argument is about **quality**. A restaurant count read from env
-is the same shape as the existing `CRAWLS_PER_DAY` cap: one number, no judgement.
+§1 rejected a thin tier because *"deciding whether existing data is good enough
+is a judgement call."* That argument is about **quality**. A restaurant count
+read from env is the same shape as the existing `CRAWLS_PER_DAY` cap: one number,
+no judgement.
 
-**Be honest about what this gives up.** This is a partial top-up, which §1 said
-no to, and it does add a second way to spend money on a neighborhood we already
-have rows for. The bound is the 24h memory below plus the daily cap.
+**Be honest about what this gives up.** It is a partial top-up, which §1 said no
+to, and it adds a second way to spend on a neighborhood we already have rows for.
+The bound is the 24h memory below plus the daily cap.
 
 ### Shape
 
@@ -182,158 +176,195 @@ have rows for. The bound is the 24h memory below plus the daily cap.
 export type Coverage = {
   neighborhood: string;
   restaurantCount: number;
-  hasData: boolean;   // > 0            — chat can answer at all
+  hasData: boolean;   // > 0            — we can answer at all
   isThin: boolean;    // < the threshold — a crawl or top-up is allowed
 };
 ```
 
 `CRAWL_MIN_RESTAURANTS`, default **3**, matching `DEFAULT_LIMIT` in
-`src/app/api/crawl/route.ts` — asking for 3 and then treating 3 as thin would
-loop.
+`src/app/api/crawl/route.ts` — asking for 3 and then treating 3 as thin loops.
 
 `POST /api/crawl` rejects with 409 when `!isThin`, replacing today's check on
 `hasData`. Every other guardrail is untouched.
 
-Three UI states follow:
-
-| Coverage | Chat | Offer |
-|---|---|---|
-| `!hasData` | blocked, empty state | crawl button |
-| `hasData && isThin` | works | quiet "only N spots in X — fetch more?" |
-| `hasData && !isThin` | works | none |
-
-The reactive condition in §6 is therefore just `coverage.isThin`.
-
 ### Not re-crawling forever
 
-A neighborhood that genuinely has little to find would otherwise offer a top-up
-every session. `crawl-limits.ts` already holds a neighborhood-keyed 24h map with
-the right TTL — it is simply only written today when a job **fails**
-(`[jobId]/route.ts:20`), and per the crawler contract a job only fails when it
-returns no restaurants at all.
+`crawl-limits.ts` already holds a neighborhood-keyed 24h map with the right TTL.
+It is only written today when a job **fails** (`[jobId]/route.ts:20`), and per
+the crawler contract a job only fails when it returns no restaurants at all.
 
-So: after a successful import, re-check coverage, and if it is **still thin**,
-record it. One extra call site, no new mechanism.
+After a successful import, re-check coverage; if it is **still thin**, record it.
+One extra call site, no new mechanism.
 
 That widens the meaning of the existing names beyond "found nothing", so rename
 `recordMiss` → `recordUnproductiveCrawl` and `isRecentMiss` →
-`wasRecentlyUnproductive`, and update the doc comment. Three call sites.
+`wasRecentlyUnproductive`. Three call sites.
 
-## 3. Read-only endpoints
+## 3. Endpoints
 
 ```
-GET /api/neighborhoods              -> { neighborhoods: string[] }
-GET /api/coverage?neighborhood=...  -> { neighborhood, restaurantCount, hasData, isThin }
+GET /api/neighborhoods -> { neighborhoods: string[] }
 ```
 
-Both unscoped by dataset — crawled neighborhoods should appear as chips so a
-user can return to one, and coverage must see them per §1.
+Distinct values from Postgres, sorted, unscoped by dataset so crawled
+neighborhoods appear too. **Never hardcode this list.** Used for the suggestion
+chips in §4.
 
-`/api/neighborhoods` reads distinct values from Postgres, sorted. **Never
-hardcode this list.**
+No `GET /api/coverage` — with the gate gone, nothing in the UI asks about
+coverage on its own; `/api/chat` checks it server-side as part of a turn.
 
-`/api/coverage` exists so the UI can ask "do we have this?" without POSTing to
-the endpoint that spends money.
+`POST /api/crawl` and `GET /api/crawl/:jobId` are unchanged apart from the §2
+threshold.
 
-## 4. Neighborhood gate
+## 4. The in-chat flow
 
-`src/components/NeighborhoodGate.tsx` (new), `ChatContainer.tsx` (state).
+No gate, no button. A normal chat turn, with three possible additions to the
+response.
 
-- Chips from `/api/neighborhoods`, plus a free-text input for anywhere else.
-  Free text is required, not optional — naming a place we lack is the point.
-- `ChatContainer` holds `neighborhood: string | null`; the gate renders while null.
-- Once chosen, it stays visible with a way to change it.
-- Coverage is checked **once on selection**, not per chat turn.
-- The three states in §2 decide what renders.
+```
+"is Karczma any good?"        → get_restaurant_details → null
+        │
+        ├─ no neighborhood identifiable → response carries needsNeighborhood
+        │     UI appends: "I don't have that one. Which neighborhood is it in?"
+        │     + chips: covered neighborhoods first, then suggestions
+        │
+   user sends "Greenpoint"
+        │
+        ├─ tool arg neighborhood="Greenpoint", present in the message,
+        │  getCoverage → isThin → route starts the crawl
+        │
+        ├─ response carries crawl: { jobId, neighborhood }
+        │     UI renders inline progress, polling GET /api/crawl/:jobId
+        │
+   job succeeds → that route imports + embeds (already built)
+        │
+        └─ UI appends: "Greenpoint is ready — want me to look at
+           'is Karczma any good?' again?" and pre-fills the composer.
+           The user sends it. Normal turn, now grounded.
+```
 
-## 5. Neighborhood into the agent
+### Why this needs no new server state
 
-- `ChatRequestSchema` gains `neighborhood: z.string().optional()`.
-- `runAgent(userMessage, history, options?: { neighborhood?: string })`.
-- `system-prompt.ts` exports `buildSystemPrompt(neighborhood?)`, appending one
-  line when present. `SYSTEM_PROMPT` stays exported as the no-neighborhood
-  default.
+The client already holds the thread, so it remembers which question triggered
+the crawl and pre-fills it on completion. The browser is the poller, and
+`GET /api/crawl/:jobId` already imports idempotently via `isImported` /
+`markImported`. Nothing has to survive between requests.
 
-**The neighborhood is optional everywhere.** `evals/runner.ts` calls
-`runAgent(golden.query)` with none, and several goldens deliberately test
-resolving a neighborhood out of free text. Making it required would invalidate
-the eval.
+**Tradeoff:** close the tab mid-crawl and the job never imports. The crawler
+still holds the result, so `npx tsx scripts/ingest/import-crawl.ts <jobId>`
+recovers it. The crawl still counted against the day's cap.
 
-No hard filtering of tool calls by neighborhood — a prompt hint is enough, and
-filtering would break the comparison goldens that span two neighborhoods.
+### The ask, and its suggestions
 
-## 6. Reactive detection
+Wording is **code-templated**, so it is deterministic and testable. Chips are
+covered neighborhoods from `/api/neighborhoods` **first** — picking one redirects
+the user to data we already have, with no spend — followed by model-suggested
+crawlable neighborhoods.
+
+The model supplying the second group is what keeps a list of NYC neighborhoods
+out of our code; hardcoding candidates would undo
+`feat/unrestricted-neighborhood`. It costs nothing, because code still decides
+the spend after the user picks.
+
+**Ships in two steps:** covered-neighborhood chips first, model suggestions
+second. The first step is useful alone.
+
+Chips **fill the composer** rather than sending, matching the existing
+`handleChipClick` in `ChatContainer.tsx`. The user still presses send, so every
+crawl traces to a message they chose to send — and the reply is an ordinary turn
+needing no "awaiting neighborhood" state machine.
+
+## 5. Detection
 
 `src/lib/crawl-offer.ts` — pure, no I/O:
 
 ```ts
-export function findCrawlCandidate(
+export function findNeighborhoodInTurn(
   userMessage: string,
   toolCalls: ToolCallRecord[],
-): string | null
+): string | null;
+
+export function hadEmptyResult(toolCalls: ToolCallRecord[]): boolean;
 ```
 
-A tool call qualifies when **all three** hold:
+`findNeighborhoodInTurn` returns a neighborhood when some tool call's parsed
+`input` carries a non-empty `neighborhood` string **that appears
+case-insensitively in the user's own message**.
 
-1. its parsed `input` carries a non-empty `neighborhood` string;
-2. that string appears **case-insensitively in the user's own message**;
-3. its `output` is empty — `runTool` returns `JSON.stringify(result)`, so that
-   means exactly `"[]"` or `"null"`.
+`hadEmptyResult` is true when any call's `output` is empty — `runTool` returns
+`JSON.stringify(result)`, so exactly `"[]"` or `"null"`.
 
-`/api/chat` then calls `getCoverage()` on the result and attaches
-`crawlOffer: { neighborhood }` only when `isThin`. Logic stays pure and
-unit-tested; the I/O stays in the route, matching the split in `hours.ts` and
-`scoring.ts`.
+`/api/chat` combines them:
 
-### Why condition 2
+| Neighborhood found | `isThin` | Empty result | Response carries |
+|---|---|---|---|
+| yes | yes | either | `crawl` — start it |
+| yes | no | — | nothing |
+| no | — | yes | `needsNeighborhood` — ask |
+| no | — | no | nothing |
 
-The gate's free-text box already lets a user's own typo through to the same
-button, and `crawl-limits.ts` bounds that. What model extraction adds on top is a
-*different* failure: the model naming a place the user never did. Requiring the
-string to appear in the user's message targets that failure specifically.
+**The empty-result condition is deliberately not required for the crawl row.**
+Greenpoint has one restaurant, so a Greenpoint query returns one result, not
+zero — requiring emptiness would make thin neighborhoods uncrawlable, which is
+the §2 bug all over again.
 
-- "what about Greenpoint?" → arg `Greenpoint`, present → offered.
-- Model infers `Manhattan` from "downtown" → absent → honest answer, no button.
-- "Flushig" → the user typed it, so it is offered, capped by `crawl-limits.ts`.
+### Why the substring condition
 
-Rejected alternatives: a fuzzy did-you-mean (East Village and West Village are
-four edits apart and both real, so it would misdirect on genuine input, and
-collisions worsen as crawling grows the known list); restricting to the session
-neighborhood (vacuous — coverage is neighborhood-level, so re-checking the gate's
-own string returns the gate's own verdict); auto-crawling on an empty turn
-(breaks *user decides to spend* and makes cost non-deterministic).
+Without a button, a model-invented neighborhood spends money on its own instead
+of producing an unclicked button. Requiring the string to appear in the user's
+message targets exactly that failure:
 
-### Known limitation
+- "what about Greenpoint?" → arg `Greenpoint`, present → crawl.
+- Model infers `Manhattan` from "downtown" → absent → no crawl.
+- "Flushig" → the user typed it, so it crawls; bounded by §2's 24h memory and
+  the daily cap.
 
-`get_restaurant_details` takes `slug`/`name` and carries **no** `neighborhood`
-argument, so a by-name miss ("is Karczma any good?") cannot be attributed to a
-neighborhood and produces no crawl offer. Since crawling is neighborhood-scoped
-(§2), there is nothing to spend on for such a miss anyway. Named because the
-original request said *"if restaurant not found"*: that half is covered only when
-the question also names a neighborhood, or when the neighborhood is thin enough
-that a top-up brings the restaurant in.
+Rejected: fuzzy did-you-mean (East Village and West Village are four edits apart
+and both real); auto-crawling on any empty turn regardless of source.
 
-## 7. Crawl panel
+## 6. What the user sees
 
-`src/components/CrawlPanel.tsx` — one component, used by the gate's empty state,
-the thin-coverage top-up offer, and the reactive offer.
+`src/components/CrawlProgress.tsx` — passive, not a control. Renders inline in
+the thread: neighborhood, `progress.completed / progress.total`, and a terminal
+state. It surfaces the real errors the routes already return (409 covered, 409
+recently unproductive, 429 daily cap) and never invents a fallback.
 
-Click → `POST /api/crawl` → poll `GET /api/crawl/:jobId` every 2s → show
-`progress.completed / progress.total` → on success re-check coverage and unlock.
+`ChatContainer.tsx` gains: the pending crawl (jobId, neighborhood, the question
+that triggered it), the poll loop, and rendering for `needsNeighborhood` chips.
 
-Surfaces the real errors the route already returns: 409 covered, 409 recently
-unproductive, 429 daily cap. It never invents a fallback.
+## 7. The Tokyo problem
+
+"best ramen shop in tokyo" produces a tool call with `neighborhood: "tokyo"`,
+present in the user's message, and `getCoverage("Tokyo")` returns 0 — so under
+§5 it starts a crawl. Removing the button removed the human who would not have
+clicked it.
+
+**The eval is structurally safe.** `evals/runner.ts:40` calls `runAgent`
+directly, never `/api/chat`. Because the trigger lives in the route and not in
+the agent, no eval run can spend money. *This is load-bearing: never move the
+crawl trigger into `src/lib/agent/`.*
+
+**A real user asking it does spend once.** Accepted, and bounded three ways: the
+crawler's `city` defaults to New York, so a Tokyo crawl returns nothing and the
+job fails; a failed job records the neighborhood for 24h, so it is not retried;
+and the daily cap bounds the worst case regardless. Cost is one wasted crawl per
+bogus term per day.
+
+An allowlist would prevent it outright and is rejected — it reintroduces the
+hardcoded neighborhood list `feat/unrestricted-neighborhood` deleted.
 
 ## 8. Tests
 
-New, in the existing `node:test` + `tsx` style, no new dependency:
+`node:test` + `tsx`, no new dependency:
 
 - `tests/dataset.test.ts` — env set/unset/override.
-- `tests/coverage.test.ts` — `isThin` at the boundary: below, exactly at, and
-  above `CRAWL_MIN_RESTAURANTS`, plus the env default.
-- `tests/crawl-offer.test.ts` — each of the three conditions failing
-  independently; `"[]"` and `"null"` both count as empty; case-insensitive match;
-  a tool with no neighborhood arg; the model-invented-neighborhood case.
+- `tests/coverage.test.ts` — `isThin` below, exactly at, and above
+  `CRAWL_MIN_RESTAURANTS`; the env default.
+- `tests/crawl-offer.test.ts` — `findNeighborhoodInTurn` with the arg absent,
+  the arg present but not in the message (the model-invented case), case
+  differing between message and arg, and no tool carrying a neighborhood;
+  `hadEmptyResult` for `"[]"`, `"null"`, and a populated result.
+- The four-row decision table in §5, as a unit test over the pure functions.
 
 The existing 93 tests must stay green.
 
@@ -342,38 +373,44 @@ The existing 93 tests must stay green.
 Run, do not assert:
 
 1. `npx tsc --noEmit`, `npm run lint`, `npm test`.
-2. After the migration, confirm the backfill by inspection — every seeded
-   neighborhood `'seed'`, Greenpoint and Red Hook `'crawled'`, nothing else:
+2. After the migration, confirm the backfill — seeded neighborhoods `'seed'`,
+   Greenpoint and Red Hook `'crawled'`, nothing else:
    ```sql
    SELECT neighborhood, dataset, count(*) FROM "Restaurant" GROUP BY 1,2 ORDER BY 1;
    ```
-3. **Both corpora must read 18/20 authored and 20/20 independent**, unchanged
-   from today, with route and retrieval 20/20. This is the acceptance test for
-   §1: if dataset scoping moves those numbers, the scoping is wrong.
-4. Greenpoint reads as thin and offers a top-up; a seeded neighborhood does not.
-5. End to end: pick an uncovered neighborhood at the gate, watch progress, then
-   ask a question and get a grounded answer about a place the app did not know.
-6. Re-run step 3 **after** that crawl. It must still read 18/20 and 20/20 — that
-   is the proof the isolation works, and the check §8 of `on-demand-crawl.md`
-   could not previously make.
-7. Trigger a crawl that leaves coverage still thin, and confirm the offer does
-   not reappear for that neighborhood.
+3. **Both corpora must read 18/20 authored and 20/20 independent**, unchanged,
+   route and retrieval 20/20. This is the acceptance test for §1.
+4. Confirm an eval run starts **zero** crawls — check the crawler's logs across a
+   full run, with G19 in it. This is the §7 guarantee.
+5. Ask about a restaurant we do not have, with no neighborhood named: the ask
+   appears, covered chips first.
+6. Answer with an uncovered neighborhood: progress renders, the job imports, the
+   completion prompt pre-fills the original question, and re-sending it answers
+   from crawled data.
+7. Re-run step 3 **after** that crawl. Still 18/20 and 20/20 — the proof §1
+   works, and the check `on-demand-crawl.md` §8 could not previously make.
+8. Answer with a covered neighborhood: no crawl starts.
+9. Trigger a crawl that leaves coverage still thin; confirm it is not retried.
 
 Pinecone is eventually consistent. Do not measure retrieval immediately after an
 upsert.
 
 ## Not building
 
-- No `crawl_neighborhood` agent tool. Code decides eligibility, the user decides
-  to spend. A tool would crawl for typos, for Tokyo, and on every retry.
+- No crawl button, no up-front neighborhood gate, no admin control.
+- No `crawl_neighborhood` agent tool, and **no crawl trigger inside the agent at
+  all** — §7 depends on this.
+- No `neighborhood` parameter threaded into `runAgent`. With the gate gone there
+  is no session neighborhood; `SYSTEM_PROMPT` is unchanged, so the eval's call
+  path is untouched.
 - No query- or name-targeted crawl (§2).
-- No fuzzy matching, no auto-crawl, no server-side neighborhood allowlist.
-- No quality-based coverage judgement. The threshold is a count, and stays one.
+- No fuzzy matching, no server-side allowlist, no quality-based coverage
+  judgement.
 
 ## Follow-up, not in scope
 
-`docs/README.md` needs a row for this spec; `on-demand-crawl.md` §1 needs a note
-that its `> 0` rule is superseded by §2 here, and §8 marked resolved once §1
-ships; `crawler-service-spec.md` is still marked *not built* but is live. All
-have uncommitted changes in the working tree, so they are left alone here to
-avoid entangling this spec with in-flight edits.
+`docs/README.md` needs a row for this spec. `on-demand-crawl.md` needs §1's
+`> 0` rule marked superseded by §2 here, §2 and §3's button-and-gate flow marked
+superseded by §4, and §8 marked resolved. `crawler-service-spec.md` is still
+marked *not built* but is live. All have uncommitted changes in the working tree,
+so they are left alone here.
