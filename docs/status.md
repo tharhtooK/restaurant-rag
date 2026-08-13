@@ -60,6 +60,7 @@ src/lib/
   pinecone.ts             Pinecone + embedding clients (lazy singletons)
   db.ts                   Prisma client (lazy singleton)
   logger.ts               leveled stderr logger, Node stdlib only
+  dataset.ts              scopes the SQL tools to seed or crawled, by env
   coverage.ts             "do we know this neighborhood?" — one COUNT
   crawl-offer.ts          pure: is there a crawlable neighborhood in this turn?
   crawl-trigger.ts        the single gate between a neighborhood and money
@@ -80,7 +81,7 @@ evals/
   scoring.ts              route / retrieval / rubric checks — pure, unit-tested
   report.ts               console output + results file
   judge.ts                LLM-as-judge for the rubric
-tests/                  node:test + tsx — 105 tests, no network, no new dependency
+tests/                  node:test + tsx — 112 tests, no network, no new dependency
 src/app/api/
   chat/route.ts           POST endpoint; also decides whether a turn starts a crawl
   crawl/route.ts          POST: start a crawl, behind the guardrails
@@ -192,7 +193,32 @@ ranking — a "quiet" restaurant topping a "loud party" query. The identical che
 once the index settled. **Do not measure retrieval immediately after an upsert**; this will
 matter for the Step 12 runner if it ever re-ingests as part of a test cycle.
 
-### Crawled data lands in the table the eval reads — 2026-08-13
+### Crawled data lands in the table the eval reads — RESOLVED 2026-08-13
+
+`Restaurant.dataset` is now `seed` or `crawled`, and `datasetWhere()` scopes
+`filter_restaurants` and `get_restaurant_details` by `RESTAURANT_DATASET`. Unset
+means no filter, so the app sees everything; `evals/runner.ts` sets `seed` itself
+rather than depending on a flag someone must remember. Measured after the change:
+
+| `RESTAURANT_DATASET` | restaurants | Bushwick | Karczma |
+|---|---|---|---|
+| unset — the app | 25 | 3 | found |
+| `seed` — the eval | 20 | 0 | null |
+| `crawled` | 5 | 3 | found |
+
+Both corpora unmoved: 18/20 authored, 20/20 independent, route 20/20, retrieval
+20/20. `getCoverage` is deliberately **not** scoped — it decides whether to spend
+money and must count crawled rows, or a neighborhood we just fetched would read as
+uncovered and be crawled again.
+
+The migration's generated `DEFAULT 'seed'` was wrong for the five rows already
+crawled, so it carries a backfill keyed on the `crawled:` review source. A crawled
+restaurant with no reviews would still be missed; none exists, and the check is in
+the migration comment.
+
+The original problem, kept for the reasoning:
+
+
 
 The in-chat crawl shipped today (below). Crawled restaurants go into the same
 `Restaurant` table `filter_restaurants` and `get_restaurant_details` read, so an
@@ -258,11 +284,9 @@ number by design — G07 and G01 were corrected to match real reviews, and the a
 contradicts both. Those two are its only failures; the former third (G19) was a rubric bug and
 is fixed.
 
-**2. Add the `dataset` column.** Tag `Restaurant` rows `seed` or `crawled` and scope
-`filter_restaurants` / `get_restaurant_details` by env, mirroring how
-`PINECONE_NAMESPACE` scopes vector search. The app sees everything; the eval sees only
-`seed`. Deferred for simplicity when the crawl shipped, and now the highest-value
-remaining item — see "Crawled data lands in the table the eval reads" above.
+**2. ~~Add the `dataset` column.~~ DONE 2026-08-13.** The eval reads only `seed`, so a
+crawl started from a chat turn can no longer change what the goldens are graded
+against. See the resolved section above.
 
 **3. Make the deployment functional** — step-by-step guide in
 [`docs/deployment.md`](deployment.md). Needs a Neon Postgres and Vercel env vars; Pinecone

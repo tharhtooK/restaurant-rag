@@ -40,8 +40,10 @@ Built in the planned order: taxonomy → goldens → data manifest → schema �
 → agent → embeddings → eval harness → failure loop. All 13 steps are done or
 explicitly substituted (scraping was replaced by web research; see below).
 
-**The next meaningful work is breaking the eval's circularity** — see Known
-Problems. Everything else is polish.
+The eval's circularity was addressed on 2026-08-12 with the independent corpus,
+and the `dataset` column made it hermetic against crawled data on 2026-08-13.
+**The next meaningful work is making the deployment functional** — see Known
+Problems and `docs/deployment.md`.
 
 ## Tech stack
 
@@ -79,16 +81,16 @@ docker compose logs -f web
 # checks — run all three before every commit
 docker compose exec web npx tsc --noEmit
 docker compose exec web npm run lint
-docker compose exec web npm test           # 105 unit tests, ~0.4s, no network
+docker compose exec web npm test           # 112 unit tests, ~0.4s, no network
 ```
 
 ```bash
 # eval (the important one)
-docker compose exec web npx tsx evals/runner.ts          # authored corpus  -> 20/20
+docker compose exec web npx tsx evals/runner.ts          # authored corpus  -> 18/20
 docker compose exec web npx tsx evals/runner.ts G01 G05  # a subset
 
 # against independently-sourced reviews — this is the number that means something
-docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts   # -> 18/20
+docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts   # -> 20/20
 ```
 
 ```bash
@@ -122,6 +124,7 @@ src/lib/agent/
   tools.ts                  zod schemas -> JSON Schema defs + runtime validation
   system-prompt.ts          scope, refusal rules, price-tier legend
 src/lib/                  on-demand crawl — none of it reachable from the agent
+  dataset.ts                scopes the SQL tools to seed or crawled, by env
   coverage.ts               "do we know this neighborhood?" — one COUNT
   crawl-offer.ts            pure: is there a crawlable neighborhood in this turn?
   crawl-trigger.ts          the single gate between a neighborhood and money
@@ -141,6 +144,8 @@ tests/                    node:test + tsx, no new dependency
   hours.test.ts             open/close boundary conditions
   search-filter.test.ts     Pinecone metadata filter branching
   logger.test.ts            level filtering and field formatting
+  crawl-offer.test.ts       which turns may start a crawl
+  dataset.test.ts           env scoping, including unset meaning no filter
 docs/
   README.md                 index — every doc has a status; half are DESIGN ONLY
   taxonomy.md               6 query categories
@@ -322,14 +327,20 @@ At 20 restaurants a 20-candidate pool is most of the namespace, so the reranker
 is effectively doing retrieval rather than refining it. Fine here; not what the
 design would look like at scale.
 
-**Crawled rows land in the table the eval reads.** Shipped 2026-08-13: a chat turn
-that finds nothing asks for a neighborhood, and naming one crawls it. There is no
-`dataset` column — specced, then cut for simplicity — so an ordinary chat turn can
-change the eval's input. A Bushwick crawl during development took the table from 22
-rows to 25; both corpora were re-run and unmoved (18/20 authored, 20/20 independent),
-but only because Bushwick appears in no golden. **Re-run both corpora after any
-crawl** until the `dataset` column exists. The vector path is already isolated —
-crawled reviews go to the `crawled` namespace, which the eval never reads.
+**Crawled rows are isolated from the eval — resolved 2026-08-13.** A chat turn that
+finds nothing asks for a neighborhood, and naming one crawls it, so ordinary use
+writes into the same `Restaurant` table the SQL tools read. `Restaurant.dataset` is
+`seed` or `crawled`; `datasetWhere()` reads `RESTAURANT_DATASET` and scopes
+`buildWhere` and `getRestaurantDetails`. Unset means no filter, so the app sees
+everything; `evals/runner.ts` sets it to `seed` itself rather than relying on a CLI
+flag. Measured: unset 25 restaurants, `seed` 20, `crawled` 5.
+
+**`getCoverage` is deliberately unscoped.** It decides whether to spend money and
+must count crawled rows — scope it and a neighborhood we just fetched reads as
+uncovered and gets crawled again on the next visit.
+
+The vector path was already isolated: crawled reviews go to the `crawled` namespace,
+which the eval never reads.
 
 **The prompt must look before it refuses.** `SYSTEM_PROMPT` now tells the agent to
 call `filter_restaurants` with an unrecognised neighborhood and use the empty result

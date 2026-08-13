@@ -224,7 +224,7 @@ Cut for simplicity, each with the reason it is survivable for now:
 
 | Cut | Why it is OK for now | What it costs |
 |---|---|---|
-| **`dataset` column** (`on-demand-crawl.md` §8) | Crawls only fire where coverage is 0, so the five seeded neighborhoods cannot receive rows, and that protects the 17 goldens naming one. G16/G20 grade on absent fields. A Tokyo crawl fails rather than imports. | The eval's table is writable by ordinary use. Verification step 7 is the only guard. |
+| ~~**`dataset` column**~~ **SHIPPED 2026-08-13** | — | Undeferred and built after a Bushwick crawl took the table from 22 rows to 25. `Restaurant.dataset` is `seed` or `crawled`; `datasetWhere()` scopes `buildWhere` and `getRestaurantDetails` by `RESTAURANT_DATASET`, which `evals/runner.ts` sets itself. Measured: unset 25 restaurants, `seed` 20, `crawled` 5. Both corpora unmoved. |
 | **Coverage threshold** (`isThin`) | The core flow only needs coverage 0. | Greenpoint and Red Hook are stuck at 1 restaurant each and can never be topped up, because `hasData` is already true. |
 | **Model-suggested chips** | Chips of what we already have still redirect the user usefully. | Every suggestion is covered, so picking one never crawls. To crawl, the user types a neighborhood themselves. |
 | **`recordMiss` rename** | Its current meaning is still accurate while nothing else writes it. | Nothing yet. |
