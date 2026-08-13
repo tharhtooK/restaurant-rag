@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - Every command runs **inside the web container**: `docker compose exec web <cmd>`.
+- **Except HTTP checks.** The `node:22-bookworm-slim` image has no `curl`. Compose publishes `3000:3000`, so run `curl` **from the host** against `localhost:3000` with no `docker compose exec` prefix.
 - Run all three before every commit: `npx tsc --noEmit`, `npm run lint`, `npm test`.
 - **No `any`.** Use `unknown` plus a narrowing check or a zod parse.
 - **Never construct an API client at module scope.** Lazy singletons only — importing a module must not throw because a key is missing.
@@ -37,7 +38,7 @@ Two pure functions that read the agent's tool calls. No I/O, so this is the one 
 - Consumes: `ToolCallRecord` from `src/lib/agent/index.ts` — `{ name: string; input: unknown; output: string }`. Import it as `import type`, so nothing from the agent is pulled in at runtime.
 - Produces: `findNeighborhoodInTurn(userMessage: string, toolCalls: ToolCallRecord[]): string | null` and `hadEmptyResult(toolCalls: ToolCallRecord[]): boolean`, both used by Task 4.
 
-- [ ] **Step 1: Write the failing test**
+- [X] **Step 1: Write the failing test**
 
 Create `tests/crawl-offer.test.ts`:
 
@@ -112,7 +113,7 @@ describe("hadEmptyResult", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [X] **Step 2: Run the test to verify it fails**
 
 ```bash
 docker compose exec web node --import tsx --test tests/crawl-offer.test.ts
@@ -120,7 +121,7 @@ docker compose exec web node --import tsx --test tests/crawl-offer.test.ts
 
 Expected: FAIL — `Cannot find module '../src/lib/crawl-offer'`.
 
-- [ ] **Step 3: Write the implementation**
+- [X] **Step 3: Write the implementation**
 
 Create `src/lib/crawl-offer.ts`:
 
@@ -160,7 +161,7 @@ export function hadEmptyResult(toolCalls: ToolCallRecord[]): boolean {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [X] **Step 4: Run the test to verify it passes**
 
 ```bash
 docker compose exec web node --import tsx --test tests/crawl-offer.test.ts
@@ -168,7 +169,7 @@ docker compose exec web node --import tsx --test tests/crawl-offer.test.ts
 
 Expected: PASS, 12 tests.
 
-- [ ] **Step 5: Run the full checks**
+- [X] **Step 5: Run the full checks**
 
 ```bash
 docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint && docker compose exec web npm test
@@ -176,7 +177,7 @@ docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint
 
 Expected: no output from tsc, no lint errors, `# pass 105` (93 existing + 12 new).
 
-- [ ] **Step 6: Commit**
+- [X] **Step 6: Commit**
 
 ```bash
 git add src/lib/crawl-offer.ts tests/crawl-offer.test.ts
@@ -201,7 +202,7 @@ git commit -m "Detect a crawlable neighborhood from a chat turn"
 
 **Deviation from the spec:** the spec lists both crawl routes as untouched. This task modifies `POST /api/crawl` anyway, because `/api/chat` needs the identical coverage-and-guardrail sequence in Task 4 and duplicating it would mean a future guardrail could be added to one path and not the other. The route's observable behaviour is unchanged — Step 3 verifies that.
 
-- [ ] **Step 1: Write the module**
+- [X] **Step 1: Write the module**
 
 Create `src/lib/crawl-trigger.ts`:
 
@@ -259,7 +260,7 @@ export async function startCrawlIfEligible(
 }
 ```
 
-- [ ] **Step 2: Rewrite the crawl route to use it**
+- [X] **Step 2: Rewrite the crawl route to use it**
 
 Replace the entire contents of `src/app/api/crawl/route.ts`:
 
@@ -320,23 +321,23 @@ export async function POST(request: Request) {
 }
 ```
 
-- [ ] **Step 3: Verify the route still behaves identically**
+- [X] **Step 3: Verify the route still behaves identically**
 
 Start the app if it is not running, then check a covered neighborhood still gives 409:
 
 ```bash
-docker compose exec web curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:3000/api/crawl -H 'Content-Type: application/json' -d '{"neighborhood":"Flushing"}'
+curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:3000/api/crawl -H 'Content-Type: application/json' -d '{"neighborhood":"Flushing"}'
 ```
 
 Expected: `409`.
 
 ```bash
-docker compose exec web curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:3000/api/crawl -H 'Content-Type: application/json' -d '{}'
+curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:3000/api/crawl -H 'Content-Type: application/json' -d '{}'
 ```
 
 Expected: `400`.
 
-- [ ] **Step 4: Run the full checks**
+- [X] **Step 4: Run the full checks**
 
 ```bash
 docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint && docker compose exec web npm test
@@ -344,7 +345,7 @@ docker compose exec web npx tsc --noEmit && docker compose exec web npm run lint
 
 Expected: clean, `# pass 105`.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add src/lib/crawl-trigger.ts src/app/api/crawl/route.ts
@@ -385,7 +386,7 @@ export async function GET() {
 - [ ] **Step 2: Verify it returns what is actually seeded**
 
 ```bash
-docker compose exec web curl -s localhost:3000/api/neighborhoods
+curl -s localhost:3000/api/neighborhoods
 ```
 
 Expected: `{"neighborhoods":["Astoria","East Village","Flushing","Greenpoint","Harlem","Red Hook","Williamsburg"]}`
@@ -475,7 +476,7 @@ Replace lines 48–54 (the `try { ... }` up to and including `return NextRespons
 - [ ] **Step 3: Verify a covered neighborhood does not crawl**
 
 ```bash
-docker compose exec web curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '{"message":"anything good in Flushing?"}' | head -c 400
+curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '{"message":"anything good in Flushing?"}' | head -c 400
 ```
 
 Expected: a normal answer with **no** `crawl` and **no** `needsNeighborhood` field.
@@ -483,7 +484,7 @@ Expected: a normal answer with **no** `crawl` and **no** `needsNeighborhood` fie
 - [ ] **Step 4: Verify a missing restaurant asks for a neighborhood**
 
 ```bash
-docker compose exec web curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '{"message":"is Fuzzy Wombat Diner any good?"}' | grep -o '"needsNeighborhood":true'
+curl -s -X POST localhost:3000/api/chat -H 'Content-Type: application/json' -d '{"message":"is Fuzzy Wombat Diner any good?"}' | grep -o '"needsNeighborhood":true'
 ```
 
 Expected: `"needsNeighborhood":true`.
@@ -841,15 +842,25 @@ If a single golden fails, re-run that golden before treating it as a regression 
 
 - [ ] **Step 2: Confirm an eval run starts zero crawls**
 
-The eval calls `runAgent` directly and never touches `/api/chat`, so no crawl should fire — including on G19, "best ramen shop in tokyo". Confirm against the crawler's own logs, or check that the day's remaining crawls are unchanged by comparing before and after:
+The eval calls `runAgent` directly and never touches `/api/chat`, so no crawl should fire — including on G19, "best ramen shop in tokyo".
+
+**Do not probe this by POSTing a crawl.** `POST /api/crawl` with an uncovered neighborhood *starts* a crawl; it does not report the budget. Probing with `{"neighborhood":"Tokyo"}` would spend a crawl and, if it succeeded, write Tokyo restaurants into the table the eval reads — causing the exact failure this step exists to detect.
+
+Check structurally instead. First, that the agent cannot reach the trigger at all:
 
 ```bash
-docker compose exec web curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:3000/api/crawl -H 'Content-Type: application/json' -d '{"neighborhood":"Tokyo"}'
+docker compose exec web grep -rn "crawl-trigger\|startCrawlIfEligible\|crawl-offer" src/lib/agent/ evals/ || echo "clean - no crawl trigger reachable from the agent or the eval"
 ```
 
-Expected before and after a full eval run: the **same** status code. A change from `202` to `429` would mean the eval spent the day's budget.
+Expected: `clean - no crawl trigger reachable from the agent or the eval`.
 
-If any crawl fired during the eval, stop — the trigger has leaked into `src/lib/agent/`, and that is the one thing this design forbids.
+Then, that a full eval run wrote nothing. Record the count before Step 1 and again after:
+
+```bash
+docker compose exec -T db psql -U app -d restaurant_rag -c 'SELECT count(*) FROM "Restaurant";'
+```
+
+Expected: **identical** before and after. Any increase means a crawl fired during the eval — stop, because the trigger has leaked out of the route, and that is the one thing this design forbids.
 
 - [ ] **Step 3: Record the numbers**
 
