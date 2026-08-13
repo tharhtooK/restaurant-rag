@@ -17,6 +17,11 @@ const ChatRequestSchema = z.object({
       }),
     )
     .default([]),
+  // True only when the previous turn showed the "which neighborhood?" ask, so
+  // this message is an answer to it. A crawl needs that consent: without it a
+  // passing mention like "near Brooklyn" would spend money on a borough nobody
+  // asked us to fetch.
+  answeringNeighborhood: z.boolean().default(false),
 });
 
 export async function POST(request: Request) {
@@ -52,18 +57,22 @@ export async function POST(request: Request) {
       toolCalls: result.toolCalls.map(tool => tool.name).join(", "),
     });
 
-    const neighborhood = findNeighborhoodInTurn(message, result.toolCalls);
-
-    if (neighborhood) {
-      const trigger = await startCrawlIfEligible(neighborhood);
-      if (trigger.started) {
-        log.info("crawl started from a chat turn", { neighborhood, jobId: trigger.jobId });
-        return NextResponse.json({
-          ...result,
-          crawl: { jobId: trigger.jobId, neighborhood },
-        });
+    if (parsed.data.answeringNeighborhood) {
+      const neighborhood = findNeighborhoodInTurn(message, result.toolCalls);
+      if (neighborhood) {
+        const trigger = await startCrawlIfEligible(neighborhood);
+        if (trigger.started) {
+          log.info("crawl started from a chat turn", { neighborhood, jobId: trigger.jobId });
+          return NextResponse.json({
+            ...result,
+            crawl: { jobId: trigger.jobId, neighborhood },
+          });
+        }
+        // Covered, capped, or recently unproductive. Answer plainly rather than
+        // asking again, which would loop.
+        log.info("no crawl for answered neighborhood", { neighborhood, reason: trigger.reason });
+        return NextResponse.json(result);
       }
-      return NextResponse.json(result);
     }
 
     if (hadEmptyResult(result.toolCalls)) {

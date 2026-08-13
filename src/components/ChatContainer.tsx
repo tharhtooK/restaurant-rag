@@ -107,7 +107,9 @@ export function ChatContainer() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
+        // The ask being on screen is what makes this message an answer to it,
+        // and an answer is the only thing allowed to start a crawl.
+        body: JSON.stringify({ message: text, history, answeringNeighborhood: needsNeighborhood }),
       });
 
       const data = await response.json();
