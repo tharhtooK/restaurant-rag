@@ -93,12 +93,36 @@ case-insensitively in the user's own message**.
 
 `/api/chat` combines them after `runAgent` returns:
 
-| Neighborhood in turn | Covered | Empty result | Response carries |
-|---|---|---|---|
-| yes | no | either | `crawl` — start it |
-| yes | yes | — | nothing |
-| no | — | yes | `needsNeighborhood` |
-| no | — | no | nothing |
+| Answering the ask | Neighborhood in turn | Covered | Empty result | Response carries |
+|---|---|---|---|---|
+| yes | yes | no | — | `crawl` — start it |
+| yes | yes | yes | — | nothing |
+| no | — | — | yes | `needsNeighborhood` |
+| no | — | — | no | nothing |
+
+### Only an answer to the ask may spend — revised 2026-08-13
+
+v4 let **any** neighborhood in the user's message start a crawl. That was too
+wide, and it cost real money: the follow-up "near Brooklyn" crawled a *borough*.
+The agent had just correctly said Brooklyn was not covered and offered
+Williamsburg; the banner then announced "I've got Brooklyn now".
+
+Nothing in the design distinguished a borough, a city, a typo or a vague phrase
+from a neighborhood — `getCoverage` returns 0 for all of them, so all of them
+crawled. And borough-level rows are bad data: a `neighborhood: "Brooklyn"` row
+overlaps Williamsburg, Bushwick, Greenpoint and Red Hook, and only ever matches
+someone typing "Brooklyn" literally.
+
+The request now carries `answeringNeighborhood`, true only when the ask was on
+screen when the message was sent. A spontaneous mention shows the ask instead of
+spending. This restores the originally requested flow — *ask, then crawl what
+they answer* — which the substring rule had widened into "crawl any place name
+the user types".
+
+The substring condition still applies on top, so an answer the model
+embellished cannot redirect the spend.
+
+Cost: a cold "any good spots in Bushwick?" now takes one extra turn.
 
 ### Why the substring condition
 

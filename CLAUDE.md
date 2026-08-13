@@ -200,6 +200,14 @@ No comment should restate the line below it.
 parking, or wait-time fields. Do not add them. Their absence is what makes the
 refusal goldens (G16/G17/G20) gradable instead of untested.
 
+**Only an answer to the neighborhood ask may start a crawl.** `/api/chat` takes
+`answeringNeighborhood`, true only when the ask was on screen when the message was
+sent. Any place name used to be enough, and "near Brooklyn" duly spent a crawl on a
+borough — bad data, since a `neighborhood: "Brooklyn"` row overlaps four
+neighborhoods we already have and matches only the literal word. Coverage is 0 for
+a borough, a city, a typo and a vague phrase alike, so consent has to come from the
+conversation, not from the string.
+
 **The crawl trigger lives in the route, never in the agent.** `/api/chat` decides
 whether a turn starts a crawl; nothing in `src/lib/agent/` may import
 `crawl-trigger.ts` or `crawl-offer.ts`. `evals/runner.ts` calls `runAgent`
