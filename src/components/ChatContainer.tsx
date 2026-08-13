@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Composer } from "./Composer";
 import { MessageList, type ChatMessage } from "./MessageList";
+import { NeighborhoodAsk } from "./NeighborhoodAsk";
 
 const PROMPT_CHIPS = [
   "quiet spot for a first date",
@@ -15,6 +16,18 @@ export function ChatContainer() {
   const [draft, setDraft] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [needsNeighborhood, setNeedsNeighborhood] = useState(false);
+  const [knownNeighborhoods, setKnownNeighborhoods] = useState<string[]>([]);
+  // The question that triggered the ask, so it can be re-offered once a crawl lands.
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/neighborhoods")
+      .then((response) => response.json())
+      .then((data) => setKnownNeighborhoods(data.neighborhoods ?? []))
+      .catch(() => setKnownNeighborhoods([]));
+  }, []);
 
   async function handleSend(text: string) {
     if (isThinking) return;
@@ -35,6 +48,12 @@ export function ChatContainer() {
       const data = await response.json();
       const content = response.ok && data.text ? data.text : "Sorry, I hit an error answering that. Try again?";
       const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : undefined;
+      if (data.needsNeighborhood) {
+        setNeedsNeighborhood(true);
+        setPendingQuestion(text);
+      } else {
+        setNeedsNeighborhood(false);
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -82,6 +101,12 @@ export function ChatContainer() {
           </div>
         ) : (
           <MessageList messages={messages} isThinking={isThinking} />
+        )}
+        {needsNeighborhood && (
+          <NeighborhoodAsk
+            neighborhoods={knownNeighborhoods}
+            onPick={handleChipClick}
+          />
         )}
         <Composer
           ref={textareaRef}
