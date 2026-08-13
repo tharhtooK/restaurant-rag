@@ -28,10 +28,19 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const source = process.argv[2];
-  const namespace = source || undefined;
+  // A trailing colon selects a family of sources: "crawled:" matches
+  // crawled:google and crawled:website, and writes them all to one namespace.
+  const isPrefix = source?.endsWith(":") ?? false;
+  const namespace = isPrefix ? source.slice(0, -1) : source || undefined;
+
+  const where = isPrefix
+    ? { source: { startsWith: source } }
+    : source
+      ? { source }
+      : undefined;
 
   const reviews = await prisma.review.findMany({
-    where: source ? { source } : undefined,
+    where,
     include: { restaurant: true },
   });
   if (source) console.log(`filtering to source="${source}" -> namespace "${namespace}"`);

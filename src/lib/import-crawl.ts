@@ -1,0 +1,108 @@
+/**
+ * Turns a crawler payload into Restaurant and Review rows, then embeds them.
+ *
+ * Shared by scripts/ingest/import-crawl.ts and the /api/crawl polling route so
+ * a hand-run import and a user-triggered one cannot drift apart.
+ */
+import { spawn } from "node:child_process";
+import type { CrawlJob, CrawledRestaurant } from "@/lib/crawler";
+import { prisma } from "@/lib/db";
+import { getLogger } from "@/lib/logger";
+
+const log = getLogger("import-crawl");
+
+export const CRAWLED_SOURCE_PREFIX = "crawled:";
+const VEGETARIAN_TAGS = ["vegetarian", "vegan"];
+
+export type ImportedRestaurant = {
+  slug: string;
+  reviews: number;
+  replaced: number;
+};
+
+function publishedDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function importRestaurant(restaurant: CrawledRestaurant): Promise<ImportedRestaurant> {
+  const vegetarianFriendly = restaurant.dietary.some((tag) => VEGETARIAN_TAGS.includes(tag));
+  const fields = {
+    name: restaurant.name,
+    neighborhood: restaurant.neighborhood,
+    cuisine: restaurant.cuisine,
+    priceTier: restaurant.priceTier,
+    address: restaurant.address,
+    vegetarianFriendly,
+    dietary: restaurant.dietary,
+    hours: restaurant.hours,
+  };
+
+  const row = await prisma.restaurant.upsert({
+    where: { slug: restaurant.slug },
+    create: { slug: restaurant.slug, ...fields },
+    update: fields,
+  });
+
+  // No unique key on Review, so replace this restaurant's crawled reviews
+  // rather than appending a duplicate set on every re-import. Authored and
+  // web-research reviews are left alone.
+  const removed = await prisma.review.deleteMany({
+    where: { restaurantId: row.id, source: { startsWith: CRAWLED_SOURCE_PREFIX } },
+  });
+
+  await prisma.review.createMany({
+    data: restaurant.reviews.map((review) => ({
+      restaurantId: row.id,
+      source: `${CRAWLED_SOURCE_PREFIX}${review.source}`,
+      content: review.content,
+      sourceUrl: review.sourceUrl ?? null,
+      publishedAt: publishedDate(review.publishedAt),
+    })),
+  });
+
+  return { slug: restaurant.slug, reviews: restaurant.reviews.length, replaced: removed.count };
+}
+
+export async function importCrawlJob(job: CrawlJob): Promise<ImportedRestaurant[]> {
+  if (job.status !== "succeeded") {
+    throw new Error(`job ${job.jobId} is "${job.status}", not "succeeded"`);
+  }
+  if (!job.restaurants?.length) {
+    throw new Error(`job ${job.jobId} succeeded but carries no restaurants`);
+  }
+
+  const imported: ImportedRestaurant[] = [];
+  for (const restaurant of job.restaurants) {
+    imported.push(await importRestaurant(restaurant));
+  }
+
+  log.info("imported crawl job", {
+    jobId: job.jobId,
+    neighborhood: job.neighborhood ?? "",
+    restaurants: imported.length,
+    reviews: imported.reduce((total, one) => total + one.reviews, 0),
+  });
+  return imported;
+}
+
+/**
+ * Shells out rather than reimplementing chunking. Re-embeds every crawled
+ * review, not just this job's; vector IDs are review primary keys, so that
+ * overwrites rather than duplicates.
+ */
+export function embedCrawledReviews(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "npx",
+      ["tsx", "scripts/ingest/embed-upsert.ts", CRAWLED_SOURCE_PREFIX],
+      { stdio: "inherit" },
+    );
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`embed-upsert exited with code ${code}`));
+    });
+  });
+}
