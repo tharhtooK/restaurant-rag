@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runAgent } from "@/lib/agent";
 import { getLogger } from "@/lib/logger";
+import { findNeighborhoodInTurn, hadEmptyResult } from "@/lib/crawl-offer";
+import { startCrawlIfEligible } from "@/lib/crawl-trigger";
 
 const log = getLogger("api/chat");
 
@@ -43,14 +45,31 @@ export async function POST(request: Request) {
   }
 
   const started = Date.now();
-  log.info("chat request received", { historyTurns: parsed.data.history.length });
-
-  try {
+   try {
     const result = await runAgent(message, parsed.data.history);
     log.info("chat request answered", {
       ms: Date.now() - started,
       toolCalls: result.toolCalls.map(tool => tool.name).join(", "),
     });
+
+    const neighborhood = findNeighborhoodInTurn(message, result.toolCalls);
+
+    if (neighborhood) {
+      const trigger = await startCrawlIfEligible(neighborhood);
+      if (trigger.started) {
+        log.info("crawl started from a chat turn", { neighborhood, jobId: trigger.jobId });
+        return NextResponse.json({
+          ...result,
+          crawl: { jobId: trigger.jobId, neighborhood },
+        });
+      }
+      return NextResponse.json(result);
+    }
+
+    if (hadEmptyResult(result.toolCalls)) {
+      return NextResponse.json({ ...result, needsNeighborhood: true });
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
