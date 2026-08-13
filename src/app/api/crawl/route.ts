@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCoverage } from "@/lib/coverage";
-import { isRecentMiss, recordCrawlStarted, remainingCrawlsToday } from "@/lib/crawl-limits";
-import { startCrawl } from "@/lib/crawler";
+import { DEFAULT_CRAWL_LIMIT, startCrawlIfEligible } from "@/lib/crawl-trigger";
 import { getLogger } from "@/lib/logger";
 
 const log = getLogger("api/crawl");
 
-// Small on purpose: a demo crawl should finish in about 90 seconds.
-const DEFAULT_LIMIT = 3;
-
 const CrawlRequestSchema = z.object({
   neighborhood: z.string().min(1),
-  limit: z.number().int().min(1).max(10).default(DEFAULT_LIMIT),
+  limit: z.number().int().min(1).max(10).default(DEFAULT_CRAWL_LIMIT),
 });
 
 export async function POST(request: Request) {
@@ -32,35 +27,28 @@ export async function POST(request: Request) {
   }
   const { neighborhood, limit } = parsed.data;
 
-  const coverage = await getCoverage(neighborhood);
-  if (coverage.hasData) {
-    log.info("refusing to crawl a covered neighborhood", {
-      neighborhood,
-      restaurants: coverage.restaurantCount,
-    });
+  const result = await startCrawlIfEligible(neighborhood, limit);
+
+  if (result.started) {
+    return NextResponse.json({ jobId: result.jobId, status: result.status }, { status: 202 });
+  }
+
+  if (result.reason === "covered") {
     return NextResponse.json(
-      { error: `Already have ${coverage.restaurantCount} restaurants in ${neighborhood}`, coverage },
+      {
+        error: `Already have ${result.coverage.restaurantCount} restaurants in ${neighborhood}`,
+        coverage: result.coverage,
+      },
       { status: 409 },
     );
   }
 
-  if (isRecentMiss(neighborhood)) {
+  if (result.reason === "recent-miss") {
     return NextResponse.json(
       { error: `A recent crawl of ${neighborhood} found nothing; not retrying today` },
       { status: 409 },
     );
   }
 
-  if (remainingCrawlsToday() <= 0) {
-    log.warn("daily crawl limit reached", { neighborhood });
-    return NextResponse.json({ error: "Daily crawl limit reached" }, { status: 429 });
-  }
-
-  // In-flight duplicates are the crawler's job: it returns the existing jobId
-  // for a neighborhood already queued or running.
-  const job = await startCrawl(neighborhood, limit);
-  recordCrawlStarted(job.jobId);
-  log.info("crawl started", { neighborhood, jobId: job.jobId, limit });
-
-  return NextResponse.json({ jobId: job.jobId, status: job.status }, { status: 202 });
+  return NextResponse.json({ error: "Daily crawl limit reached" }, { status: 429 });
 }
