@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Composer } from "./Composer";
 import { MessageList, type ChatMessage } from "./MessageList";
 import { NeighborhoodAsk } from "./NeighborhoodAsk";
+import { CrawlProgress } from "./CrawlProgress";
 
 const PROMPT_CHIPS = [
   "quiet spot for a first date",
@@ -11,11 +12,21 @@ const PROMPT_CHIPS = [
   "open past midnight downtown",
 ];
 
+type PendingCrawl = {
+  jobId: string;
+  neighborhood: string;
+  question: string;
+  status: string;
+  completed: number;
+  total: number;
+};
+
 export function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [pendingCrawl, setPendingCrawl] = useState<PendingCrawl | null>(null);
 
   const [needsNeighborhood, setNeedsNeighborhood] = useState(false);
   const [knownNeighborhoods, setKnownNeighborhoods] = useState<string[]>([]);
@@ -28,6 +39,57 @@ export function ChatContainer() {
       .then((data) => setKnownNeighborhoods(data.neighborhoods ?? []))
       .catch(() => setKnownNeighborhoods([]));
   }, []);
+
+  useEffect(() => {
+    if (!pendingCrawl || pendingCrawl.status === "succeeded" || pendingCrawl.status === "failed") {
+      return;
+    }
+
+    const jobId = pendingCrawl.jobId;
+    let cancelled = false;
+
+    const timer = setInterval(async () => {
+      let job;
+      try {
+        const response = await fetch(`/api/crawl/${jobId}`);
+        job = await response.json();
+      } catch {
+        return;
+      }
+      if (cancelled) return;
+
+      setPendingCrawl((current) => {
+        if (!current || current.jobId !== jobId) return current;
+        return {
+          ...current,
+          status: job.status ?? current.status,
+          completed: job.progress?.completed ?? current.completed,
+          total: job.progress?.total ?? current.total,
+        };
+      });
+
+      if (job.status === "succeeded") {
+        // Cleared here, not just by the effect re-running, so a poll already in
+        // flight cannot append the completion message a second time.
+        clearInterval(timer);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `I've got ${pendingCrawl.neighborhood} now — want me to look at "${pendingCrawl.question}" again?`,
+          },
+        ]);
+        setDraft(pendingCrawl.question);
+        setPendingQuestion(null);
+      }
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pendingCrawl]);
 
   async function handleSend(text: string) {
     if (isThinking) return;
@@ -53,6 +115,17 @@ export function ChatContainer() {
         setPendingQuestion(text);
       } else {
         setNeedsNeighborhood(false);
+      }
+      if (data.crawl) {
+        setNeedsNeighborhood(false);
+        setPendingCrawl({
+          jobId: data.crawl.jobId,
+          neighborhood: data.crawl.neighborhood,
+          question: pendingQuestion ?? text,
+          status: "queued",
+          completed: 0,
+          total: 0,
+        });
       }
 
       setMessages((prev) => [
@@ -101,6 +174,14 @@ export function ChatContainer() {
           </div>
         ) : (
           <MessageList messages={messages} isThinking={isThinking} />
+        )}
+        {pendingCrawl && pendingCrawl.status !== "succeeded" && (
+          <CrawlProgress
+            neighborhood={pendingCrawl.neighborhood}
+            status={pendingCrawl.status}
+            completed={pendingCrawl.completed}
+            total={pendingCrawl.total}
+          />
         )}
         {needsNeighborhood && (
           <NeighborhoodAsk
