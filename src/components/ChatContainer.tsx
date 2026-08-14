@@ -186,7 +186,7 @@ export function ChatContainer() {
   }
 
   return (
-    <main className="flex h-dvh flex-col bg-background text-foreground">
+    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4">
         {messages.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
