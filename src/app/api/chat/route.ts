@@ -5,6 +5,7 @@ import { getLogger } from "@/lib/logger";
 import { hadEmptyResult } from "@/lib/crawl-offer";
 import { describeLocation, parseLocation } from "@/lib/location";
 import { startCrawlIfEligible } from "@/lib/crawl-trigger";
+import type { ChatResponse } from "@/lib/chat-contract";
 
 const log = getLogger("api/chat");
 
@@ -67,10 +68,11 @@ export async function POST(request: Request) {
         const trigger = await startCrawlIfEligible(location);
         if (trigger.started) {
           log.info("crawl started from a chat turn", { location: label, jobId: trigger.jobId });
-          return NextResponse.json({
+          const body: ChatResponse = {
             ...result,
             crawl: { jobId: trigger.jobId, location: label },
-          });
+          };
+          return NextResponse.json(body);
         }
         // Covered, capped, or recently unproductive. Answer plainly rather than
         // asking again, which would loop.
@@ -80,7 +82,8 @@ export async function POST(request: Request) {
     }
 
     if (hadEmptyResult(result.toolCalls)) {
-      return NextResponse.json({ ...result, needsNeighborhood: true });
+      const body: ChatResponse = { ...result, needsNeighborhood: true };
+      return NextResponse.json(body);
     }
 
     return NextResponse.json(result);

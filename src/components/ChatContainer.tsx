@@ -5,6 +5,7 @@ import { Composer } from "./Composer";
 import { MessageList, type ChatMessage } from "./MessageList";
 import { NeighborhoodAsk } from "./NeighborhoodAsk";
 import { CrawlProgress } from "./CrawlProgress";
+import type { ChatResponse, CrawlJobStatus } from "@/lib/chat-contract";
 
 const PROMPT_CHIPS = [
   "quiet spot for a first date",
@@ -14,7 +15,7 @@ const PROMPT_CHIPS = [
 
 type PendingCrawl = {
   jobId: string;
-  neighborhood: string;
+  location: string;
   question: string;
   status: string;
   completed: number;
@@ -49,10 +50,10 @@ export function ChatContainer() {
     let cancelled = false;
 
     const timer = setInterval(async () => {
-      let job;
+      let job: CrawlJobStatus;
       try {
         const response = await fetch(`/api/crawl/${jobId}`);
-        job = await response.json();
+        job = (await response.json()) as CrawlJobStatus;
       } catch {
         return;
       }
@@ -80,7 +81,7 @@ export function ChatContainer() {
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `I've got ${pendingCrawl.neighborhood} now — want me to look at "${pendingCrawl.question}" again?`,
+            content: `I've got ${pendingCrawl.location} now — want me to look at "${pendingCrawl.question}" again?`,
           },
         ]);
         setDraft(pendingCrawl.question);
@@ -112,7 +113,7 @@ export function ChatContainer() {
         body: JSON.stringify({ message: text, history, answeringNeighborhood: needsNeighborhood }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ChatResponse;
       const content = response.ok && data.text ? data.text : "Sorry, I hit an error answering that. Try again?";
       const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : undefined;
       if (data.needsNeighborhood) {
@@ -125,7 +126,7 @@ export function ChatContainer() {
         setNeedsNeighborhood(false);
         setPendingCrawl({
           jobId: data.crawl.jobId,
-          neighborhood: data.crawl.neighborhood,
+          location: data.crawl.location,
           question: pendingQuestion ?? text,
           status: "queued",
           completed: 0,
@@ -182,7 +183,7 @@ export function ChatContainer() {
         )}
         {pendingCrawl && pendingCrawl.status !== "succeeded" && (
           <CrawlProgress
-            neighborhood={pendingCrawl.neighborhood}
+            location={pendingCrawl.location}
             status={pendingCrawl.status}
             completed={pendingCrawl.completed}
             total={pendingCrawl.total}
