@@ -14,6 +14,8 @@ export type ChatResponse = {
   crawl?: { jobId: string; location: string };
   /** Present when the lookup found nothing and we need a location to fetch. */
   needsNeighborhood?: true;
+  /** The location was crawlable but the crawler service could not be reached. */
+  crawlUnavailable?: true;
   error?: string;
   detail?: string;
 };

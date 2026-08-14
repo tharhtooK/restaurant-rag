@@ -79,10 +79,12 @@ export async function POST(request: Request) {
           };
           return NextResponse.json(body);
         }
-        // Covered, capped, or recently unproductive. Answer plainly rather than
-        // asking again, which would loop.
+        // Covered, capped, recently unproductive, or the crawler is down. Answer
+        // plainly rather than asking again, which would loop.
         log.info("no crawl for answered location", { location: label, reason: trigger.reason });
-        return NextResponse.json(result);
+        const body: ChatResponse = { ...result };
+        if (trigger.reason === "unavailable") body.crawlUnavailable = true;
+        return NextResponse.json(body);
       }
     }
 

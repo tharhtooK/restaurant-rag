@@ -14,7 +14,8 @@ export type CrawlTriggerResult =
   | { started: true; jobId: string; status: string }
   | { started: false; reason: "covered"; coverage: Coverage }
   | { started: false; reason: "recent-miss" }
-  | { started: false; reason: "daily-cap" };
+  | { started: false; reason: "daily-cap" }
+  | { started: false; reason: "unavailable"; detail: string };
 
 /**
  * The single gate between a neighborhood and money being spent. Both the crawl
@@ -49,7 +50,18 @@ export async function startCrawlIfEligible(
   // The crawler requires a neighborhood, so a city-level crawl sends the city as
   // one. import-crawl drops it again rather than storing a neighborhood named
   // after a city.
-  const job = await startCrawl(location.neighborhood ?? location.city, location.city, limit);
+  // The crawler is a separate service on a host that sleeps, so treat it being
+  // down as an outcome rather than an exception. It used to throw straight
+  // through /api/chat and turn a good answer into a 500.
+  let job;
+  try {
+    job = await startCrawl(location.neighborhood ?? location.city, location.city, limit);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    log.error("crawler unreachable", { location: label, detail });
+    return { started: false, reason: "unavailable", detail };
+  }
+
   recordCrawlStarted(job.jobId);
   recordCrawlLocation(job.jobId, location);
   log.info("crawl started", { location: label, jobId: job.jobId, limit });

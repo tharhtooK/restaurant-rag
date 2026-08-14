@@ -58,5 +58,12 @@ export async function POST(request: Request) {
     );
   }
 
+  if (result.reason === "unavailable") {
+    return NextResponse.json(
+      { error: "The crawler service is unreachable", detail: result.detail },
+      { status: 502 },
+    );
+  }
+
   return NextResponse.json({ error: "Daily crawl limit reached" }, { status: 429 });
 }

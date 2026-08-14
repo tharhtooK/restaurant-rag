@@ -138,6 +138,18 @@ export function ChatContainer() {
       } else {
         setNeedsNeighborhood(false);
       }
+      // The location was fetchable but the service is down. Say so, rather than
+      // leaving a bare "I don't have that" with no explanation.
+      if (data.crawlUnavailable) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "I couldn't reach the service that fetches new places, so I can't add that one right now.",
+          },
+        ]);
+      }
       if (data.crawl) {
         setNeedsNeighborhood(false);
         setPendingCrawl({
