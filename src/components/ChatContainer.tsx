@@ -6,6 +6,7 @@ import { MessageList, type ChatMessage } from "./MessageList";
 import { NeighborhoodAsk } from "./NeighborhoodAsk";
 import { CrawlProgress } from "./CrawlProgress";
 import type { ChatResponse, CrawlJobStatus } from "@/lib/chat-contract";
+import { describeLocation, parseLocation } from "@/lib/location";
 
 const PROMPT_CHIPS = [
   "quiet spot for a first date",
@@ -33,6 +34,8 @@ export function ChatContainer() {
   const [knownNeighborhoods, setKnownNeighborhoods] = useState<string[]>([]);
   // The question that triggered the ask, so it can be re-offered once a crawl lands.
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  // Asked for once, then sent with every turn so the agent stops asking.
+  const [sessionLocation, setSessionLocation] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/neighborhoods")
@@ -104,13 +107,26 @@ export function ChatContainer() {
     setDraft("");
     setIsThinking(true);
 
+    // Only a reply to the ask sets the session location. parseLocation is
+    // permissive by design - it treats a bare word as a city - so parsing every
+    // message would make "good korea bbq spot" the user's location.
+    if (needsNeighborhood) {
+      const named = parseLocation(text);
+      if (named) setSessionLocation(describeLocation(named));
+    }
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // The ask being on screen is what makes this message an answer to it,
         // and an answer is the only thing allowed to start a crawl.
-        body: JSON.stringify({ message: text, history, answeringNeighborhood: needsNeighborhood }),
+        body: JSON.stringify({
+          message: text,
+          history,
+          answeringNeighborhood: needsNeighborhood,
+          location: sessionLocation ?? undefined,
+        }),
       });
 
       const data = (await response.json()) as ChatResponse;

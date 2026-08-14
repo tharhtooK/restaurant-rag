@@ -5,7 +5,7 @@ import type {
 } from "openai/resources/responses/responses";
 import { getOpenAI } from "@/lib/openai";
 import { getLogger } from "@/lib/logger";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt } from "./system-prompt";
 import { toolDefinitions, runTool } from "./tools";
 
 const MODEL = "gpt-5.6-terra";
@@ -59,15 +59,22 @@ async function executeToolCall(call: ResponseFunctionToolCall): Promise<ToolCall
   return { name: call.name, input: args, output };
 }
 
-export async function runAgent(userMessage: string, history: ChatTurn[] = []): Promise<AgentResult> {
+export type RunAgentOptions = { location?: string };
+
+export async function runAgent(
+  userMessage: string,
+  history: ChatTurn[] = [],
+  options: RunAgentOptions = {},
+): Promise<AgentResult> {
   const toolCalls: ToolCallRecord[] = [];
   const input = buildInput(userMessage, history);
+  const instructions = buildSystemPrompt(options.location);
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const started = Date.now();
     const response = await getOpenAI().responses.create({
       model: MODEL,
-      instructions: SYSTEM_PROMPT,
+      instructions,
       tools: toolDefinitions,
       input,
     });

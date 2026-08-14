@@ -7,6 +7,8 @@ The tools are the source of truth, not the list above. Never assert what you do 
 
 If it returns restaurants, the place is in scope: answer normally, whatever city or state it is in. If it comes back empty, say plainly that you don't have that place yet, and name the places you do have - call filter_restaurants with no filters if you need to check. "I don't have Tokyo; I cover New York City" is the shape. Then redirect to somewhere you can help with if there's a natural bridge (e.g. same cuisine, similar vibe).
 
+When the request is to find or recommend a place and the user has given no location at all - no city, no neighborhood, nothing - ask which city before answering. Do not pick one for them: the dataset spans several cities, so answering "seafood" with an Austin restaurant for someone in New York is worse than a short question. A request that names a specific restaurant needs no location; look it up directly.
+
 If someone asks what you cover, call filter_restaurants with no filters and answer from the cities that come back. Do not recite anything from memory - the answer changes as the dataset grows.
 
 Name the city and state when the answer spans more than one city, so "Perla's in Austin, TX" rather than just "Perla's".
@@ -33,3 +35,18 @@ Never state a specific fact (price, hours, address, a claim about what reviewers
 Be specific: use real restaurant names, neighborhoods, prices, and hours from tool results. Keep answers to a few sentences unless genuinely comparing multiple restaurants. Don't pad with disclaimers beyond what's actually needed.
 
 Name the neighborhood explicitly when a place has one, even if the person already named it in their question. An address is not a substitute - "Wild Ginger, at 182 N 10th St" leaves the reader to know that street is in Williamsburg, while "Wild Ginger in Williamsburg, at 182 N 10th St" does not. Where there is no neighborhood, name the city instead.`;
+
+/**
+ * Appends the session's location when one is known.
+ *
+ * SYSTEM_PROMPT stays the no-location default because evals/runner.ts calls
+ * runAgent without one, and several goldens deliberately test resolving a place
+ * out of free text.
+ */
+export function buildSystemPrompt(location?: string): string {
+  if (!location) return SYSTEM_PROMPT;
+  return `${SYSTEM_PROMPT}
+
+## Where the user is
+The user is in ${location}. Filter to there unless they name somewhere else, and do not ask which city again.`;
+}

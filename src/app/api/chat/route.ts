@@ -24,6 +24,9 @@ const ChatRequestSchema = z.object({
   // passing mention like "near Brooklyn" would spend money on a borough nobody
   // asked us to fetch.
   answeringNeighborhood: z.boolean().default(false),
+  // The session's location, once the user has given one. Asked for once, then
+  // resent each turn so the agent never asks twice.
+  location: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -53,7 +56,9 @@ export async function POST(request: Request) {
 
   const started = Date.now();
    try {
-    const result = await runAgent(message, parsed.data.history);
+    const result = await runAgent(message, parsed.data.history, {
+      location: parsed.data.location,
+    });
     log.info("chat request answered", {
       ms: Date.now() - started,
       toolCalls: result.toolCalls.map(tool => tool.name).join(", "),
