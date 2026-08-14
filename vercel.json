@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "DATABASE_URL=$RestaurantRag_DATABASE_URL_UNPOOLED npx prisma migrate deploy && npm run build"
+}

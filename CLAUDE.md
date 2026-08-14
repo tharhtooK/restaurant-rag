@@ -432,8 +432,21 @@ that is superseded. Do not introduce drizzle or a second ORM.
 **Unresolved:** the monorepo split (`python-scraper/` + `nextjs-rag/` was
 planned; this is a flat repo).
 
-**The deployed app is not functional.** `restaurant-rag.vercel.app` serves the
-UI, but `/api/chat` returns a credentials error — Vercel has no environment
-variables set, and `DATABASE_URL` points at the Docker-internal `db:5432`, so a
-hosted Postgres is needed before the agent can run in production. Pinecone is
-already hosted and populated. Local (`docker compose up`) is the working system.
+**The deployed app works — resolved 2026-08-14.** `restaurant-rag.vercel.app`
+answers with grounded results against a hosted Neon Postgres. Migrations run in
+the Vercel build (`vercel.json`), against the **unpooled** Neon URL, so a schema
+change reaches production with the deploy that needs it and a failed migration
+fails the build rather than leaving code and schema disagreeing. See
+`docs/deployment.md`.
+
+**Production does not use the LiteLLM proxy.** `OPENAI_BASE_URL` is unset on
+Vercel and `OPENAI_API_KEY` is a real OpenAI key, so the per-student budget
+cannot take the deployed app down. Local development still goes through the
+proxy, which means the budget failure mode described above applies to the eval
+and to `docker compose`, not to production.
+
+**The crawler is a separate deployment and may be down.** `CRAWLER_URL` points at
+a Fly app outside this repo. `/api/chat` returns `crawlUnavailable: true`
+alongside a normal answer when it cannot be reached, so a dead crawler degrades
+the crawl feature without breaking chat. Verified against an unreachable crawler
+on 2026-08-14.
