@@ -6,6 +6,8 @@ import { getRestaurantDetails } from "@/lib/tools/get-restaurant-details";
 
 const filterRestaurantsSchema = z.object({
   neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   cuisine: z.string().optional(),
   priceTierMin: z.number().int().min(1).max(4).optional(),
   priceTierMax: z.number().int().min(1).max(4).optional(),
@@ -17,6 +19,8 @@ const filterRestaurantsSchema = z.object({
 const searchOpinionsSchema = z.object({
   query: z.string(),
   neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   restaurantSlugs: z.array(z.string()).optional(),
 });
 
@@ -34,7 +38,7 @@ type ToolEntry<Schema extends z.ZodType> = {
 const toolEntries = {
   filter_restaurants: {
     description:
-      "Search restaurants by structured criteria: neighborhood, cuisine, price tier, whether it's " +
+      "Search restaurants by structured criteria: city, state, neighborhood, cuisine, price tier, whether it's " +
       "tagged vegetarian-friendly, and time-of-day constraints (open past a given time, or opens by " +
       "a given time - useful for 'open late' or 'breakfast before 9am' style queries). Use this for " +
       "any query with a hard filterable constraint. Returns matching restaurants with their basic facts.",

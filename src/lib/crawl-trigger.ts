@@ -1,4 +1,5 @@
 import { getCoverage, type Coverage } from "@/lib/coverage";
+import { describeLocation, type Location } from "@/lib/location";
 import { isRecentMiss, recordCrawlStarted, remainingCrawlsToday } from "@/lib/crawl-limits";
 import { startCrawl } from "@/lib/crawler";
 import { getLogger } from "@/lib/logger";
@@ -20,32 +21,36 @@ export type CrawlTriggerResult =
  * to every path.
  */
 export async function startCrawlIfEligible(
-  neighborhood: string,
+  location: Location,
   limit: number = DEFAULT_CRAWL_LIMIT,
 ): Promise<CrawlTriggerResult> {
-  const coverage = await getCoverage(neighborhood);
+  const label = describeLocation(location);
+  const coverage = await getCoverage(location);
   if (coverage.hasData) {
-    log.info("refusing to crawl a covered neighborhood", {
-      neighborhood,
+    log.info("refusing to crawl a covered city", {
+      location: label,
       restaurants: coverage.restaurantCount,
     });
     return { started: false, reason: "covered", coverage };
   }
 
-  if (isRecentMiss(neighborhood)) {
+  if (isRecentMiss(label)) {
     return { started: false, reason: "recent-miss" };
   }
 
   if (remainingCrawlsToday() <= 0) {
-    log.warn("daily crawl limit reached", { neighborhood });
+    log.warn("daily crawl limit reached", { location: label });
     return { started: false, reason: "daily-cap" };
   }
 
   // In-flight duplicates are the crawler's job: it returns the existing jobId
   // for a neighborhood already queued or running.
-  const job = await startCrawl(neighborhood, limit);
+  // The crawler requires a neighborhood, so a city-level crawl sends the city as
+  // one. import-crawl drops it again rather than storing a neighborhood named
+  // after a city.
+  const job = await startCrawl(location.neighborhood ?? location.city, location.city, limit);
   recordCrawlStarted(job.jobId);
-  log.info("crawl started", { neighborhood, jobId: job.jobId, limit });
+  log.info("crawl started", { location: label, jobId: job.jobId, limit });
 
   return { started: true, jobId: job.jobId, status: job.status };
 }

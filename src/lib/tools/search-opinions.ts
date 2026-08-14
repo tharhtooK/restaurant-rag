@@ -20,6 +20,8 @@ export type SearchOpinionsInput = {
   query: string;
   /** Optionally restrict the search to one neighborhood. */
   neighborhood?: string;
+  city?: string;
+  state?: string;
   /** Optionally restrict the search to specific restaurant slugs. */
   restaurantSlugs?: string[];
   limit?: number;
@@ -42,6 +44,8 @@ export type OpinionMatch = {
 export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, unknown> | null {
   const filters: Record<string, unknown>[] = [];
   if (input.neighborhood) filters.push({ neighborhood: { $eq: input.neighborhood } });
+  if (input.city) filters.push({ city: { $eq: input.city } });
+  if (input.state) filters.push({ state: { $eq: input.state } });
   if (input.restaurantSlugs?.length) {
     filters.push({ restaurantSlug: { $in: input.restaurantSlugs } });
   }

@@ -86,12 +86,16 @@ export async function getCrawlJob(jobId: string): Promise<CrawlJob> {
   return crawlJobSchema.parse(await response.json());
 }
 
-export async function startCrawl(neighborhood: string, limit: number): Promise<CrawlJob> {
+export async function startCrawl(
+  neighborhood: string,
+  city: string,
+  limit: number,
+): Promise<CrawlJob> {
   const { baseUrl, apiKey } = crawlerConfig();
   const response = await fetch(`${baseUrl}/crawl`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ neighborhood, limit }),
+    body: JSON.stringify({ neighborhood, city, limit }),
     cache: "no-store",
   });
   if (!response.ok) {

@@ -7,7 +7,9 @@ export type Hours = Record<DayKey, DayHours>;
 export type RestaurantSummary = {
   slug: string;
   name: string;
-  neighborhood: string;
+  neighborhood: string | null;
+  city: string;
+  state: string;
   cuisine: string;
   priceTier: number;
   address: string;

@@ -34,7 +34,11 @@ model Restaurant {
   id                 String   @id @default(cuid())
   slug               String   @unique
   name               String
-  neighborhood       String
+  /// Only dense cities have meaningful neighborhoods, so this is null for
+  /// anywhere crawled at city level. city and state are the pair always present.
+  neighborhood       String?
+  city               String   @default("")
+  state              String   @default("")
   cuisine            String
   priceTier          Int
   address            String
@@ -50,6 +54,8 @@ model Restaurant {
   reviews Review[]
 
   @@index([neighborhood])
+  @@index([city])
+  @@index([state])
   @@index([cuisine])
   @@index([priceTier])
   @@index([dataset])

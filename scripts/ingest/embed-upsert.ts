@@ -9,8 +9,9 @@
  * rather than duplicating.
  *
  * Usage:
- *   npx tsx scripts/ingest/embed-upsert.ts                     # all reviews -> default namespace
+ *   npx tsx scripts/ingest/embed-upsert.ts                     # authored corpus -> default namespace
  *   npx tsx scripts/ingest/embed-upsert.ts web-research        # only independently-sourced
+ *   npx tsx scripts/ingest/embed-upsert.ts crawled:            # every crawled source -> "crawled"
  *
  * Passing a source writes into a Pinecone namespace of the same name, so the
  * authored and independent corpora stay isolated and can be evaluated
@@ -26,24 +27,27 @@ const BATCH_SIZE = 50;
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
+// The default namespace holds the authored corpus and nothing else. Embedding
+// every review into it was safe when authored reviews were the only ones; with
+// three corpora it silently contaminates the set the eval grades against, which
+// is exactly what happened on 2026-08-14.
+const DEFAULT_NAMESPACE_SOURCE = "authored-for-goldens";
+
 async function main() {
-  const source = process.argv[2];
+  const source = process.argv[2] ?? DEFAULT_NAMESPACE_SOURCE;
+  const namespaceless = process.argv[2] === undefined;
   // A trailing colon selects a family of sources: "crawled:" matches
   // crawled:google and crawled:website, and writes them all to one namespace.
   const isPrefix = source?.endsWith(":") ?? false;
-  const namespace = isPrefix ? source.slice(0, -1) : source || undefined;
+  const namespace = namespaceless ? undefined : isPrefix ? source.slice(0, -1) : source;
 
-  const where = isPrefix
-    ? { source: { startsWith: source } }
-    : source
-      ? { source }
-      : undefined;
+  const where = isPrefix ? { source: { startsWith: source } } : { source };
 
   const reviews = await prisma.review.findMany({
     where,
     include: { restaurant: true },
   });
-  if (source) console.log(`filtering to source="${source}" -> namespace "${namespace}"`);
+  console.log(`filtering to source="${source}" -> namespace "${namespace ?? "__default__"}"`);
   console.log(`found ${reviews.length} reviews to embed`);
 
   if (reviews.length === 0) {
@@ -66,7 +70,9 @@ async function main() {
         metadata: {
           restaurantSlug: review.restaurant.slug,
           restaurantName: review.restaurant.name,
-          neighborhood: review.restaurant.neighborhood,
+          neighborhood: review.restaurant.neighborhood ?? "",
+          city: review.restaurant.city,
+          state: review.restaurant.state,
           source: review.source,
           content: review.content,
         } satisfies ReviewVectorMetadata,

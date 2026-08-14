@@ -9,8 +9,9 @@ export function NeighborhoodAsk({ neighborhoods, onPick }: NeighborhoodAskProps)
   return (
     <div className="flex flex-col gap-3 rounded-lg bg-surface p-4">
       <p className="text-sm text-foreground">
-        I don&apos;t have that one. Which neighborhood is it in? I already know these,
-        or type somewhere else and I&apos;ll go look it up.
+        I don&apos;t have that one. Which city? Give me city and state &mdash; like
+        &ldquo;Austin, TX&rdquo;. Add a neighborhood first if you want somewhere
+        specific. Here&apos;s what I already know:
       </p>
       <div className="flex flex-wrap gap-2">
         {neighborhoods.map((neighborhood) => (

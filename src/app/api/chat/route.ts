@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runAgent } from "@/lib/agent";
 import { getLogger } from "@/lib/logger";
-import { findNeighborhoodInTurn, hadEmptyResult } from "@/lib/crawl-offer";
+import { hadEmptyResult } from "@/lib/crawl-offer";
+import { describeLocation, parseLocation } from "@/lib/location";
 import { startCrawlIfEligible } from "@/lib/crawl-trigger";
 
 const log = getLogger("api/chat");
@@ -57,20 +58,23 @@ export async function POST(request: Request) {
       toolCalls: result.toolCalls.map(tool => tool.name).join(", "),
     });
 
+    // The location comes from the user's own words, not from a tool argument, so
+    // the model cannot redirect what gets crawled.
     if (parsed.data.answeringNeighborhood) {
-      const neighborhood = findNeighborhoodInTurn(message, result.toolCalls);
-      if (neighborhood) {
-        const trigger = await startCrawlIfEligible(neighborhood);
+      const location = parseLocation(message);
+      if (location) {
+        const label = describeLocation(location);
+        const trigger = await startCrawlIfEligible(location);
         if (trigger.started) {
-          log.info("crawl started from a chat turn", { neighborhood, jobId: trigger.jobId });
+          log.info("crawl started from a chat turn", { location: label, jobId: trigger.jobId });
           return NextResponse.json({
             ...result,
-            crawl: { jobId: trigger.jobId, neighborhood },
+            crawl: { jobId: trigger.jobId, location: label },
           });
         }
         // Covered, capped, or recently unproductive. Answer plainly rather than
         // asking again, which would loop.
-        log.info("no crawl for answered neighborhood", { neighborhood, reason: trigger.reason });
+        log.info("no crawl for answered location", { location: label, reason: trigger.reason });
         return NextResponse.json(result);
       }
     }

@@ -7,6 +7,7 @@
 import { spawn } from "node:child_process";
 import type { CrawlJob, CrawledRestaurant } from "@/lib/crawler";
 import { prisma } from "@/lib/db";
+import { parseAddressLocation, scopeSlug } from "@/lib/location";
 import { getLogger } from "@/lib/logger";
 
 const log = getLogger("import-crawl");
@@ -28,9 +29,21 @@ function publishedDate(value: string | null | undefined): Date | null {
 
 async function importRestaurant(restaurant: CrawledRestaurant): Promise<ImportedRestaurant> {
   const vegetarianFriendly = restaurant.dietary.some((tag) => VEGETARIAN_TAGS.includes(tag));
+  const { city, state } = parseAddressLocation(restaurant.address);
+
+  // A city-level crawl has to send the city as the neighborhood, because the
+  // crawler requires one. Storing that back would invent a neighborhood named
+  // after a city, which is how "Brooklyn" became one on 2026-08-13.
+  const isCityLevel =
+    restaurant.neighborhood.trim().toLowerCase() === city.trim().toLowerCase();
+
+  const slug = scopeSlug(restaurant.slug, { neighborhood: null, city, state });
+
   const fields = {
     name: restaurant.name,
-    neighborhood: restaurant.neighborhood,
+    neighborhood: isCityLevel ? null : restaurant.neighborhood,
+    city,
+    state,
     cuisine: restaurant.cuisine,
     priceTier: restaurant.priceTier,
     address: restaurant.address,
@@ -41,8 +54,8 @@ async function importRestaurant(restaurant: CrawledRestaurant): Promise<Imported
   };
 
   const row = await prisma.restaurant.upsert({
-    where: { slug: restaurant.slug },
-    create: { slug: restaurant.slug, ...fields },
+    where: { slug },
+    create: { slug, ...fields },
     update: fields,
   });
 
@@ -63,7 +76,7 @@ async function importRestaurant(restaurant: CrawledRestaurant): Promise<Imported
     })),
   });
 
-  return { slug: restaurant.slug, reviews: restaurant.reviews.length, replaced: removed.count };
+  return { slug, reviews: restaurant.reviews.length, replaced: removed.count };
 }
 
 export async function importCrawlJob(job: CrawlJob): Promise<ImportedRestaurant[]> {
