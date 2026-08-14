@@ -116,6 +116,7 @@ docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.
 ```bash
 # data
 docker compose exec web npx prisma migrate dev --name <name>
+docker compose restart web   # REQUIRED after any schema change - see below
 docker compose exec web npx prisma db seed
 docker compose exec web npx tsx scripts/ingest/embed-upsert.ts                # authored -> default ns
 docker compose exec web npx tsx scripts/ingest/embed-upsert.ts crawled:        # every crawled source
@@ -221,6 +222,14 @@ whether a turn starts a crawl; nothing in `src/lib/agent/` may import
 directly, so this is the only thing stopping an eval run from spending money —
 G19 ("best ramen shop in tokyo") now calls `filter_restaurants` with
 `neighborhood: "Tokyo"`, and would crawl on every run if the trigger moved.
+
+**Restart the web container after every schema change.** `next dev` caches the
+generated Prisma client, so a fresh `prisma generate` does not reach the running
+server. This bit twice on 2026-08-13/14, and both times the checks looked green
+because `tsc` and `npx tsx` read the new client off disk while only the *running
+app* was broken — the failure surfaces as `Unknown argument \`city\`` from a route,
+never from a test. If a route reports a column the schema plainly has, restart
+before debugging anything else.
 
 **`embed-upsert.ts` with no argument writes the authored corpus only.** It used
 to embed *every* review into the default namespace, which was harmless when
