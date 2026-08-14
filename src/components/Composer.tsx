@@ -66,7 +66,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask about a place to eat…"
-          className="max-h-[200px] flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed text-foreground placeholder:text-muted focus:outline-none"
+          className="no-scrollbar max-h-[200px] flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-relaxed text-foreground placeholder:text-muted focus:outline-none"
         />
         <button
           type="submit"

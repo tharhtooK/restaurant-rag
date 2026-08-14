@@ -46,7 +46,7 @@ function ToolCallRow({ call }: ToolCallRowProps) {
       </summary>
 
       <div className="mt-1 flex flex-col gap-2 rounded bg-surface p-2 text-[12px] leading-relaxed text-muted">
-        <pre className="overflow-x-auto">{formatToolArguments(call.input)}</pre>
+        <pre className="no-scrollbar overflow-x-auto">{formatToolArguments(call.input)}</pre>
         <ResultDetail headline={result.headline} items={result.items} />
       </div>
     </details>
