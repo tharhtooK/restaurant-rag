@@ -7,7 +7,7 @@
 import { spawn } from "node:child_process";
 import type { CrawlJob, CrawledRestaurant } from "@/lib/crawler";
 import { prisma } from "@/lib/db";
-import { parseAddressLocation, scopeSlug } from "@/lib/location";
+import { parseAddressLocation, scopeSlug, type Location } from "@/lib/location";
 import { getLogger } from "@/lib/logger";
 
 const log = getLogger("import-crawl");
@@ -79,7 +79,25 @@ async function importRestaurant(restaurant: CrawledRestaurant): Promise<Imported
   return { slug, reviews: restaurant.reviews.length, replaced: removed.count };
 }
 
-export async function importCrawlJob(job: CrawlJob): Promise<ImportedRestaurant[]> {
+/**
+ * Restaurants actually in the city that was asked for.
+ *
+ * The crawler falls back to New York when it cannot resolve a city, so a request
+ * for an unresolvable place comes back full of real restaurants somewhere else.
+ * Importing those files them under the requested name and quietly corrupts the
+ * data, which is what "in mable grove" did on 2026-08-14.
+ */
+function inRequestedCity(restaurants: CrawledRestaurant[], expected: Location) {
+  const wanted = expected.city.trim().toLowerCase();
+  return restaurants.filter(
+    (restaurant) => parseAddressLocation(restaurant.address).city.trim().toLowerCase() === wanted,
+  );
+}
+
+export async function importCrawlJob(
+  job: CrawlJob,
+  expected?: Location,
+): Promise<ImportedRestaurant[]> {
   if (job.status !== "succeeded") {
     throw new Error(`job ${job.jobId} is "${job.status}", not "succeeded"`);
   }
@@ -87,8 +105,19 @@ export async function importCrawlJob(job: CrawlJob): Promise<ImportedRestaurant[
     throw new Error(`job ${job.jobId} succeeded but carries no restaurants`);
   }
 
+  const wanted = expected ? inRequestedCity(job.restaurants, expected) : job.restaurants;
+  const dropped = job.restaurants.length - wanted.length;
+  if (dropped > 0) {
+    log.warn("dropped crawled restaurants from the wrong city", {
+      jobId: job.jobId,
+      requested: expected ? expected.city : "",
+      dropped,
+      kept: wanted.length,
+    });
+  }
+
   const imported: ImportedRestaurant[] = [];
-  for (const restaurant of job.restaurants) {
+  for (const restaurant of wanted) {
     imported.push(await importRestaurant(restaurant));
   }
 

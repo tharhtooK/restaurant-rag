@@ -1,6 +1,7 @@
 import { getCoverage, type Coverage } from "@/lib/coverage";
 import { describeLocation, type Location } from "@/lib/location";
 import { isRecentMiss, recordCrawlStarted, remainingCrawlsToday } from "@/lib/crawl-limits";
+import { recordCrawlLocation } from "@/lib/crawl-jobs";
 import { startCrawl } from "@/lib/crawler";
 import { getLogger } from "@/lib/logger";
 
@@ -50,6 +51,7 @@ export async function startCrawlIfEligible(
   // after a city.
   const job = await startCrawl(location.neighborhood ?? location.city, location.city, limit);
   recordCrawlStarted(job.jobId);
+  recordCrawlLocation(job.jobId, location);
   log.info("crawl started", { location: label, jobId: job.jobId, limit });
 
   return { started: true, jobId: job.jobId, status: job.status };

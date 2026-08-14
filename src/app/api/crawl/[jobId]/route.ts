@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isImported, markImported, recordMiss, releaseImportClaim } from "@/lib/crawl-limits";
+import { getCrawlLocation } from "@/lib/crawl-jobs";
 import { getCrawlJob } from "@/lib/crawler";
+import { describeLocation } from "@/lib/location";
 import { embedCrawledReviews, importCrawlJob } from "@/lib/import-crawl";
 import { getLogger } from "@/lib/logger";
 
@@ -36,10 +38,13 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/crawl/[
   // done. Keeping the claim after a throw made the next poll answer
   // imported: true for rows that were never written.
   markImported(jobId);
+  const expected = getCrawlLocation(jobId);
   let imported;
   try {
-    imported = await importCrawlJob(job);
-    await embedCrawledReviews();
+    imported = await importCrawlJob(job, expected);
+    // Only after something was actually written: embedding re-reads every
+    // crawled review, so running it for a job that imported nothing is pure cost.
+    if (imported.length > 0) await embedCrawledReviews();
   } catch (error) {
     releaseImportClaim(jobId);
     log.error("crawl import failed", {
@@ -49,6 +54,20 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/crawl/[
     });
     throw error;
   }
+  // Everything came back from somewhere else - the crawler's New York fallback.
+  // Report it as a miss so the location is not retried for 24h, rather than
+  // leaving the client polling a job that will never import.
+  if (imported.length === 0) {
+    const where = expected ? describeLocation(expected) : (job.neighborhood ?? "");
+    if (where) recordMiss(where);
+    log.warn("crawl found nothing in the requested place", { jobId, requested: where });
+    return NextResponse.json({
+      jobId,
+      status: "failed",
+      error: `Couldn't find restaurants in ${where}`,
+    });
+  }
+
   log.info("crawl imported and embedded", { jobId, restaurants: imported.length });
 
   return NextResponse.json({
