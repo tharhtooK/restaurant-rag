@@ -7,7 +7,12 @@
 import { spawn } from "node:child_process";
 import type { CrawlJob, CrawledRestaurant } from "@/lib/crawler";
 import { prisma } from "@/lib/db";
-import { parseAddressLocation, scopeSlug, type Location } from "@/lib/location";
+import {
+  normalizeAddress,
+  parseAddressLocation,
+  scopeSlug,
+  type Location,
+} from "@/lib/location";
 import { getLogger } from "@/lib/logger";
 
 const log = getLogger("import-crawl");
@@ -27,7 +32,10 @@ function publishedDate(value: string | null | undefined): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-async function importRestaurant(restaurant: CrawledRestaurant): Promise<ImportedRestaurant> {
+async function importRestaurant(
+  restaurant: CrawledRestaurant,
+  existingSlug?: string,
+): Promise<ImportedRestaurant> {
   const vegetarianFriendly = restaurant.dietary.some((tag) => VEGETARIAN_TAGS.includes(tag));
   const { city, state } = parseAddressLocation(restaurant.address);
 
@@ -37,7 +45,10 @@ async function importRestaurant(restaurant: CrawledRestaurant): Promise<Imported
   const isCityLevel =
     restaurant.neighborhood.trim().toLowerCase() === city.trim().toLowerCase();
 
-  const slug = scopeSlug(restaurant.slug, { neighborhood: null, city, state });
+  // Reuse the row's own slug when this address is already known: the crawler
+  // derives its slug from whichever neighborhood it was asked for, so the same
+  // restaurant fetched twice under different requests would otherwise land twice.
+  const slug = existingSlug ?? scopeSlug(restaurant.slug, { neighborhood: null, city, state });
 
   const fields = {
     name: restaurant.name,
@@ -94,6 +105,20 @@ function inRequestedCity(restaurants: CrawledRestaurant[], expected: Location) {
   );
 }
 
+/**
+ * Every restaurant we already hold, keyed by address.
+ *
+ * Loaded once per job rather than queried per restaurant. That is fine at this
+ * scale - tens of rows - and would need an indexed normalised column if the
+ * dataset grew.
+ */
+async function knownByAddress(): Promise<Map<string, { slug: string; dataset: string }>> {
+  const rows = await prisma.restaurant.findMany({
+    select: { slug: true, address: true, dataset: true },
+  });
+  return new Map(rows.map((row) => [normalizeAddress(row.address), row]));
+}
+
 export async function importCrawlJob(
   job: CrawlJob,
   expected?: Location,
@@ -116,9 +141,24 @@ export async function importCrawlJob(
     });
   }
 
+  const known = await knownByAddress();
+
   const imported: ImportedRestaurant[] = [];
   for (const restaurant of wanted) {
-    imported.push(await importRestaurant(restaurant));
+    const existing = known.get(normalizeAddress(restaurant.address));
+
+    // Never let a crawl touch the graded corpus. Crawling a wider area can pull
+    // back a seeded restaurant - "Queens, NY" has no rows of its own but
+    // contains Astoria - and rewriting one would change what the goldens grade.
+    if (existing?.dataset === "seed") {
+      log.info("skipping a restaurant already in the seeded corpus", {
+        slug: existing.slug,
+        name: restaurant.name,
+      });
+      continue;
+    }
+
+    imported.push(await importRestaurant(restaurant, existing?.slug));
   }
 
   log.info("imported crawl job", {

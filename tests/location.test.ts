@@ -1,6 +1,11 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { parseAddressLocation, parseLocation, scopeSlug } from "../src/lib/location";
+import {
+  normalizeAddress,
+  parseAddressLocation,
+  parseLocation,
+  scopeSlug,
+} from "../src/lib/location";
 
 describe("parseLocation", () => {
   test("city and state", () => {
@@ -181,5 +186,35 @@ describe("scopeSlug", () => {
 
   test("skips a missing state", () => {
     assert.equal(scopeSlug("so-junes", { neighborhood: null, city: "Austin", state: "" }), "austin-so-junes");
+  });
+});
+
+describe("normalizeAddress", () => {
+  test("the USA suffix does not change identity", () => {
+    assert.equal(
+      normalizeAddress("1722 S Congress Ave, Austin, TX 78704, USA"),
+      normalizeAddress("1722 S Congress Ave, Austin, TX 78704"),
+    );
+  });
+
+  test("punctuation, case and spacing do not change identity", () => {
+    assert.equal(
+      normalizeAddress("150 E 14th St, New York, NY 10003"),
+      normalizeAddress("150 e 14th st  new york ny 10003"),
+    );
+  });
+
+  test("different addresses stay different", () => {
+    assert.notEqual(
+      normalizeAddress("1722 S Congress Ave, Austin, TX 78704"),
+      normalizeAddress("1400 S Congress Ave, Austin, TX 78704"),
+    );
+  });
+
+  test("a different unit number is a different address", () => {
+    assert.notEqual(
+      normalizeAddress("2214 Flatbush Ave, Brooklyn, NY 11234"),
+      normalizeAddress("2216 Flatbush Ave, Brooklyn, NY 11234"),
+    );
   });
 });

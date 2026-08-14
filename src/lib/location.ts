@@ -93,3 +93,19 @@ export function parseAddressLocation(address: string): { city: string; state: st
 export function describeLocation(location: Location): string {
   return [location.neighborhood, location.city, location.state].filter(Boolean).join(", ");
 }
+
+/**
+ * An address reduced to a comparison key.
+ *
+ * A restaurant's identity is its address: the crawler's slug is derived from
+ * whichever neighborhood it was asked for, so the same place crawled as part of
+ * "marine park" and again as part of "Brooklyn" arrives under two different
+ * slugs. Google also appends ", USA" inconsistently, and the seeded corpus never
+ * has it.
+ */
+export function normalizeAddress(address: string): string {
+  return address
+    .toLowerCase()
+    .replace(/,\s*usa\s*$/, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
