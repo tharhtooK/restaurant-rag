@@ -4,9 +4,9 @@
  * Shared by scripts/ingest/import-crawl.ts and the /api/crawl polling route so
  * a hand-run import and a user-triggered one cannot drift apart.
  */
-import { spawn } from "node:child_process";
 import type { CrawlJob, CrawledRestaurant } from "@/lib/crawler";
 import { prisma } from "@/lib/db";
+import { embedReviews } from "@/lib/embed-reviews";
 import {
   normalizeAddress,
   parseAddressLocation,
@@ -171,21 +171,14 @@ export async function importCrawlJob(
 }
 
 /**
- * Shells out rather than reimplementing chunking. Re-embeds every crawled
- * review, not just this job's; vector IDs are review primary keys, so that
- * overwrites rather than duplicates.
+ * Re-embeds every crawled review, not just this job's; vector IDs are review
+ * primary keys, so that overwrites rather than duplicates.
+ *
+ * In-process on purpose. This used to spawn `npx tsx scripts/ingest/...`, which
+ * works under Docker and silently cannot on Vercel - no npx, no tsx, no scripts/
+ * in the traced bundle - so every crawl import in production wrote its rows and
+ * then threw, leaving crawled restaurants invisible to search_opinions.
  */
-export function embedCrawledReviews(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      "npx",
-      ["tsx", "scripts/ingest/embed-upsert.ts", CRAWLED_SOURCE_PREFIX],
-      { stdio: "inherit" },
-    );
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`embed-upsert exited with code ${code}`));
-    });
-  });
+export async function embedCrawledReviews(): Promise<void> {
+  await embedReviews(CRAWLED_SOURCE_PREFIX);
 }
