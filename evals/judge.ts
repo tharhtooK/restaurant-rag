@@ -12,7 +12,9 @@ import type { Golden } from "./types";
  * them. The judge is itself fallible; its verdicts are advisory, and its
  * reasoning is recorded so a disputed call can be checked by hand.
  */
-const JUDGE_MODEL = "gpt-5.6-terra";
+// Same model as the agent on purpose: the judge grades the agent's output, and
+// letting the two drift apart silently would change what the score means.
+const JUDGE_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 
 const VerdictSchema = z.object({
   must_mention_results: z.array(

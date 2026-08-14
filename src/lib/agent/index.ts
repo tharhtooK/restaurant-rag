@@ -8,7 +8,9 @@ import { getLogger } from "@/lib/logger";
 import { buildSystemPrompt } from "./system-prompt";
 import { toolDefinitions, runTool } from "./tools";
 
-const MODEL = "gpt-5.6-terra";
+// Overridable so a different provider is an .env change rather than a source
+// edit: gpt-5.6-terra is a LiteLLM alias and does not exist on api.openai.com.
+const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 const MAX_TOOL_ITERATIONS = 8;
 
 const log = getLogger("agent");

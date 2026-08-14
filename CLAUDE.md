@@ -82,7 +82,25 @@ Problems and `docs/deployment.md`.
 | Local dev | Docker Compose | `node:22-bookworm-slim` + Postgres 16 |
 
 **All OpenAI traffic routes through a LiteLLM proxy** (`OPENAI_BASE_URL`), not
-`api.openai.com`.
+`api.openai.com`. The key carries a **per-student budget**, and it is shared by
+the agent, the eval judge and embeddings — `src/lib/openai.ts` is the only
+client. Exhausting it fails every one of them at once: on 2026-08-14 the eval
+dropped to 12/20 with a different set of goldens "failing" each run, all of them
+reporting `errored` rather than a rubric miss. If scores collapse unevenly and
+runs get *faster*, check the budget before reading anything into the numbers.
+
+A full eval run is 40+ model calls (20 agent invocations plus 20 judge calls), so
+iterate with a single golden — `evals/runner.ts G01` — and save full runs for
+changes that actually touch the agent path.
+
+**Switching provider is an env change, not a code edit.** `OPENAI_MODEL`
+overrides the model for both the agent and the judge, defaulting to
+`gpt-5.6-terra`. To leave the proxy: set your own `OPENAI_API_KEY`, **remove**
+`OPENAI_BASE_URL` (the SDK then defaults to `api.openai.com`), and set
+`OPENAI_MODEL` to a model your account has — `gpt-5.6-terra` is a LiteLLM alias
+that exists only on the proxy. It must support the **Responses API**, since the
+agent calls `responses.create`. Embeddings need no change:
+`text-embedding-3-small` is a real OpenAI model.
 
 ## Commands
 
