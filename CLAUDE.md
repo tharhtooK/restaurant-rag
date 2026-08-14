@@ -17,6 +17,9 @@ eval tractable:
   `dataset: "seed"`
 - **20 seeded restaurants**, real and verified (see `docs/data-manifest.md`).
   Crawling adds more, tagged `crawled` and invisible to the eval
+- **Restaurants are located by `city` + `state`**, with `neighborhood` nullable —
+  only dense cities have one. Crawling targets a **city**, so `getCoverage` is
+  keyed on city, not neighborhood. Seeded rows are all `New York, NY`.
 - **Two retrieval paths:** Postgres for structured facts, Pinecone for semantic
   search over review prose
 - **One router + tool-calling agent** — not a multi-agent system
@@ -98,7 +101,7 @@ docker compose logs -f web
 # checks — run all three before every commit
 docker compose exec web npx tsc --noEmit
 docker compose exec web npm run lint
-docker compose exec web npm test           # 112 unit tests, ~0.4s, no network
+docker compose exec web npm test           # 129 unit tests, ~0.5s, no network
 ```
 
 ```bash
@@ -114,8 +117,10 @@ docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.
 # data
 docker compose exec web npx prisma migrate dev --name <name>
 docker compose exec web npx prisma db seed
-docker compose exec web npx tsx scripts/ingest/embed-upsert.ts                # all -> default ns
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts                # authored -> default ns
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts crawled:        # every crawled source
 docker compose exec web npx tsx scripts/ingest/embed-upsert.ts web-research   # independent only
+docker compose exec web npx tsx scripts/pinecone-stats.ts                     # per-namespace counts
 docker compose exec db psql -U app -d restaurant_rag
 ```
 
@@ -126,7 +131,7 @@ anonymous `node_modules` volume). Installing on the host alone is not enough.
 
 ```
 src/lib/tools/            retrieval, provider-agnostic
-  filter-restaurants.ts     SQL: neighborhood, cuisine, price tier, veg, hours
+  filter-restaurants.ts     SQL: city, state, neighborhood, cuisine, price tier, veg, hours
   search-opinions.ts        Pinecone semantic search + cross-encoder rerank
   get-restaurant-details.ts single-entity lookup (returns BOTH facts and reviews)
   hours.ts                  pure open/close predicates — no I/O, unit-tested
@@ -142,9 +147,10 @@ src/lib/agent/
   system-prompt.ts          scope, refusal rules, price-tier legend
 src/lib/                  on-demand crawl — none of it reachable from the agent
   dataset.ts                scopes the SQL tools to seed or crawled, by env
-  coverage.ts               "do we know this neighborhood?" — one COUNT
-  crawl-offer.ts            pure: is there a crawlable neighborhood in this turn?
-  crawl-trigger.ts          the single gate between a neighborhood and money
+  coverage.ts               "do we know this city?" — one COUNT
+  location.ts               parse "Austin, TX", read city/state from an address, scope slugs
+  crawl-offer.ts            pure: did this turn come up empty?
+  crawl-trigger.ts          the single gate between a location and money
   crawl-limits.ts           daily cap + 24h miss memory, in-process
   crawler.ts                client for the crawler service, zod at the boundary
   import-crawl.ts           crawl payload -> Restaurant + Review rows
@@ -162,6 +168,7 @@ tests/                    node:test + tsx, no new dependency
   search-filter.test.ts     Pinecone metadata filter branching
   logger.test.ts            level filtering and field formatting
   crawl-offer.test.ts       which turns may start a crawl
+  location.test.ts          location parsing and slug scoping
   dataset.test.ts           env scoping, including unset meaning no filter
 docs/
   README.md                 index — every doc has a status; half are DESIGN ONLY
@@ -214,6 +221,14 @@ whether a turn starts a crawl; nothing in `src/lib/agent/` may import
 directly, so this is the only thing stopping an eval run from spending money —
 G19 ("best ramen shop in tokyo") now calls `filter_restaurants` with
 `neighborhood: "Tokyo"`, and would crawl on every run if the trigger moved.
+
+**`embed-upsert.ts` with no argument writes the authored corpus only.** It used
+to embed *every* review into the default namespace, which was harmless when
+authored reviews were the only ones and silently contaminated the eval's corpus
+once there were three. On 2026-08-14 a no-arg run took `__default__` from 36
+records to 120 by mixing in `web-research` and `crawled`. Namespaces are the
+whole basis of the three-corpus measurement — check
+`scripts/pinecone-stats.ts` after any ingest.
 
 **Never write review content to make a golden pass.** That is how the eval became
 circular in the first place. New review text belongs in
