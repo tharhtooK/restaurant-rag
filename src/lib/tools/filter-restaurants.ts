@@ -1,10 +1,13 @@
 import { Prisma } from "@/generated/prisma/client";
+import { datasetWhere } from "@/lib/dataset";
 import { prisma } from "@/lib/db";
 import { matchesHours } from "./hours";
 import { Hours, RestaurantSummary } from "./types";
 
 export type FilterRestaurantsInput = {
   neighborhood?: string;
+  city?: string;
+  state?: string;
   cuisine?: string;
   priceTierMin?: number;
   priceTierMax?: number;
@@ -14,7 +17,7 @@ export type FilterRestaurantsInput = {
 };
 
 export function buildWhere(input: FilterRestaurantsInput): Prisma.RestaurantWhereInput {
-  const where: Prisma.RestaurantWhereInput = {};
+  const where: Prisma.RestaurantWhereInput = { ...datasetWhere() };
 
   // Matched case-insensitively because the tool schema accepts any string: with
   // no enum pinning the casing, "east village" would otherwise return nothing
@@ -22,6 +25,8 @@ export function buildWhere(input: FilterRestaurantsInput): Prisma.RestaurantWher
   if (input.neighborhood) {
     where.neighborhood = { equals: input.neighborhood, mode: "insensitive" };
   }
+  if (input.city) where.city = { equals: input.city, mode: "insensitive" };
+  if (input.state) where.state = { equals: input.state, mode: "insensitive" };
   if (input.cuisine) where.cuisine = { contains: input.cuisine, mode: "insensitive" };
   if (input.vegetarianFriendly !== undefined) where.vegetarianFriendly = input.vegetarianFriendly;
 
@@ -50,6 +55,8 @@ export async function filterRestaurants(
       slug: row.slug,
       name: row.name,
       neighborhood: row.neighborhood,
+      city: row.city,
+      state: row.state,
       cuisine: row.cuisine,
       priceTier: row.priceTier,
       address: row.address,

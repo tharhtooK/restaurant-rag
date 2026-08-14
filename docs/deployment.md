@@ -1,17 +1,40 @@
 # Deployment — hosted Postgres + Vercel
 
-_Written 2026-08-12. Picks up where the session left off; nothing here has been
-executed yet._
+> **Status** Reference · **executed** — the deploy is live and answering · **Updated** 2026-08-14 · **Version** v2
+
+_Steps 1–3 were carried out on 2026-08-13/14. They are kept below as the record
+of how production was built, not as work still to do._
 
 ## Where things stand
 
-- `https://restaurant-rag.vercel.app/` serves the UI and builds green.
-- `/api/chat` returns a credentials error — Vercel has **no environment
-  variables set**.
-- `DATABASE_URL` points at the Docker-internal `db:5432`, which does not exist
-  in production, so a **hosted Postgres is required**.
-- Pinecone is already hosted and populated (index `restaurants`, 59 vectors
-  across two namespaces). **Nothing to do there.**
+- `https://restaurant-rag.vercel.app/` serves the UI and `/api/chat` returns
+  grounded answers naming real restaurants.
+- Neon Postgres is provisioned through the Vercel Neon integration, migrated,
+  and seeded. The integration supplies `RestaurantRag_*` variables; the app's
+  own `DATABASE_URL` is set separately to the pooled string.
+- Pinecone is hosted and populated. **Nothing to do there.**
+- Production uses a **real OpenAI key against `api.openai.com`** —
+  `OPENAI_BASE_URL` is deliberately unset, so production does not depend on the
+  LiteLLM proxy or its per-student budget. Local development still goes through
+  the proxy.
+
+**Migrations run at build time.** `vercel.json` sets the build command to
+
+```
+DATABASE_URL=$RestaurantRag_DATABASE_URL_UNPOOLED npx prisma migrate deploy && npm run build
+```
+
+so schema changes reach Neon as part of the deploy that needs them, and a
+migration failure fails the build instead of producing a running app whose code
+and schema disagree. The **unpooled** URL is used for the reason in Step 1 —
+Prisma Migrate cannot run through PgBouncer in transaction mode. This makes the
+manual `migrate deploy` in Step 3 unnecessary for subsequent deploys.
+
+**The crawler service is a separate deployment.** `CRAWLER_URL` points at a Fly
+app (`restaurant-crawler-cqfv-w.fly.dev`), which is outside this repo and can be
+down independently. `/api/chat` handles that: it returns `crawlUnavailable: true`
+with a normal answer rather than failing the turn. Verified 2026-08-14 while the
+Fly app was unreachable.
 
 Use the alias `restaurant-rag.vercel.app`, never a
 `restaurant-<hash>-<scope>.vercel.app` URL — those are immutable per-deployment

@@ -1,5 +1,7 @@
 # Coding Guidelines
 
+> **Status** Standard · applies to all code in this repo · **Updated** 2026-08-12 · **Version** v1
+
 You write simple, boring code. Someone unfamiliar with the project should
 understand any file in under a minute.
 

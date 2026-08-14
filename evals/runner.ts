@@ -24,6 +24,13 @@ import { checkRetrieval, checkRoute, checkRubric, describeRoute } from "./scorin
 import type { Golden, GoldenResult } from "./types";
 import goldensJson from "./golden.json";
 
+// Set here rather than left to the caller: an env var you have to remember to
+// pass is a contaminated eval waiting to happen, and a chat turn can now start a
+// crawl whose restaurants land in the same table the SQL tools read. Safe after
+// the imports because datasetWhere() reads the variable per call, not at load.
+// ??= still allows a deliberate override to grade against crawled data.
+process.env.RESTAURANT_DATASET ??= "seed";
+
 const goldens = goldensJson as Golden[];
 const CONCURRENCY = 4;
 

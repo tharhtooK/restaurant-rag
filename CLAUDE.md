@@ -12,22 +12,42 @@ rather than asserted**.
 Scope is fixed and load-bearing — narrowness is the point, because it makes the
 eval tractable:
 
-- **NYC, 5 neighborhoods:** East Village, Flushing, Williamsburg, Harlem, Astoria
-- **20 restaurants**, real and verified (see `docs/data-manifest.md`)
+- **NYC, 5 seeded neighborhoods:** East Village, Flushing, Williamsburg, Harlem,
+  Astoria — the corpus the eval is graded against, and the only rows tagged
+  `dataset: "seed"`
+- **20 seeded restaurants**, real and verified (see `docs/data-manifest.md`).
+  Crawling adds more, tagged `crawled` and invisible to the eval
+- **Restaurants are located by `city` + `state`**, with `neighborhood` nullable —
+  only dense cities have one. Crawling targets a **city**, so `getCoverage` is
+  keyed on city, not neighborhood. Seeded rows are all `New York, NY`.
 - **Two retrieval paths:** Postgres for structured facts, Pinecone for semantic
   search over review prose
 - **One router + tool-calling agent** — not a multi-agent system
 
-**Scope is enforced by the system prompt and by what is in the data, not by the
-tool schema.** The `neighborhood` argument was a `z.enum` of the five until
-2026-08-12; it is now a plain string, so the agent can ask for anywhere and gets
-an empty result rather than a validation error. Seeding a sixth neighborhood no
-longer requires editing a constant in `src/lib/agent/tools.ts`. The refusal
-behaviour that G18/G19/G20 grade is unchanged — it always came from the prompt.
+**Scope is enforced by what is in the data.** Not by the tool schema, and since
+2026-08-13 not by a list in the prompt either. Three steps got here:
 
-Postgres matches `neighborhood` case-insensitively because nothing pins the
-casing any more. Pinecone metadata filters cannot do the same, so `search_opinions`
-still needs the canonical spelling, which the system prompt supplies.
+1. the `neighborhood` argument was a `z.enum` of the five until 2026-08-12; it is
+   now a plain string, so the agent can ask for anywhere and gets an empty result
+   rather than a validation error;
+2. the prompt now tells the agent to **look a neighborhood up before saying
+   anything about scope** — without this the crawl could never fire, because the
+   agent refused unknown neighborhoods without calling a tool at all;
+3. the prompt no longer asserts "5 neighborhoods" or "20 restaurants". It cannot:
+   `RESTAURANT_DATASET` makes the true answer differ between the eval (5 and 20)
+   and the app (8 and 25, after crawling Bushwick, Greenpoint and Red Hook). A
+   coverage question is answered by calling `filter_restaurants`, not from memory.
+
+The five names remain in the prompt for one reason only: `search_opinions` needs
+canonical spellings because Pinecone metadata filters cannot match
+case-insensitively. Postgres matches `neighborhood` case-insensitively, so the SQL
+path does not care.
+
+The refusal behaviour G18/G19/G20 grade is unchanged in outcome — an out-of-scope
+place is still refused, now with a lookup behind the refusal rather than a list.
+
+Both rules are load-bearing rather than stylistic; the failure each one prevents is
+recorded under Known Problems.
 
 The goal is not "a chatbot that answers about restaurants." It is a system whose
 answers are **graded against a golden set**, where a regression shows up as a
@@ -40,8 +60,10 @@ Built in the planned order: taxonomy → goldens → data manifest → schema �
 → agent → embeddings → eval harness → failure loop. All 13 steps are done or
 explicitly substituted (scraping was replaced by web research; see below).
 
-**The next meaningful work is breaking the eval's circularity** — see Known
-Problems. Everything else is polish.
+The eval's circularity was addressed on 2026-08-12 with the independent corpus,
+and the `dataset` column made it hermetic against crawled data on 2026-08-13.
+**The next meaningful work is making the deployment functional** — see Known
+Problems and `docs/deployment.md`.
 
 ## Tech stack
 
@@ -60,7 +82,25 @@ Problems. Everything else is polish.
 | Local dev | Docker Compose | `node:22-bookworm-slim` + Postgres 16 |
 
 **All OpenAI traffic routes through a LiteLLM proxy** (`OPENAI_BASE_URL`), not
-`api.openai.com`.
+`api.openai.com`. The key carries a **per-student budget**, and it is shared by
+the agent, the eval judge and embeddings — `src/lib/openai.ts` is the only
+client. Exhausting it fails every one of them at once: on 2026-08-14 the eval
+dropped to 12/20 with a different set of goldens "failing" each run, all of them
+reporting `errored` rather than a rubric miss. If scores collapse unevenly and
+runs get *faster*, check the budget before reading anything into the numbers.
+
+A full eval run is 40+ model calls (20 agent invocations plus 20 judge calls), so
+iterate with a single golden — `evals/runner.ts G01` — and save full runs for
+changes that actually touch the agent path.
+
+**Switching provider is an env change, not a code edit.** `OPENAI_MODEL`
+overrides the model for both the agent and the judge, defaulting to
+`gpt-5.6-terra`. To leave the proxy: set your own `OPENAI_API_KEY`, **remove**
+`OPENAI_BASE_URL` (the SDK then defaults to `api.openai.com`), and set
+`OPENAI_MODEL` to a model your account has — `gpt-5.6-terra` is a LiteLLM alias
+that exists only on the proxy. It must support the **Responses API**, since the
+agent calls `responses.create`. Embeddings need no change:
+`text-embedding-3-small` is a real OpenAI model.
 
 ## Commands
 
@@ -79,24 +119,27 @@ docker compose logs -f web
 # checks — run all three before every commit
 docker compose exec web npx tsc --noEmit
 docker compose exec web npm run lint
-docker compose exec web npm test           # 46 unit tests, ~0.2s, no network
+docker compose exec web npm test           # 129 unit tests, ~0.5s, no network
 ```
 
 ```bash
 # eval (the important one)
-docker compose exec web npx tsx evals/runner.ts          # authored corpus  -> 20/20
+docker compose exec web npx tsx evals/runner.ts          # authored corpus  -> 18/20
 docker compose exec web npx tsx evals/runner.ts G01 G05  # a subset
 
 # against independently-sourced reviews — this is the number that means something
-docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts   # -> 18/20
+docker compose exec -e PINECONE_NAMESPACE=web-research web npx tsx evals/runner.ts   # -> 20/20
 ```
 
 ```bash
 # data
 docker compose exec web npx prisma migrate dev --name <name>
+docker compose restart web   # REQUIRED after any schema change - see below
 docker compose exec web npx prisma db seed
-docker compose exec web npx tsx scripts/ingest/embed-upsert.ts                # all -> default ns
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts                # authored -> default ns
+docker compose exec web npx tsx scripts/ingest/embed-upsert.ts crawled:        # every crawled source
 docker compose exec web npx tsx scripts/ingest/embed-upsert.ts web-research   # independent only
+docker compose exec web npx tsx scripts/pinecone-stats.ts                     # per-namespace counts
 docker compose exec db psql -U app -d restaurant_rag
 ```
 
@@ -107,7 +150,7 @@ anonymous `node_modules` volume). Installing on the host alone is not enough.
 
 ```
 src/lib/tools/            retrieval, provider-agnostic
-  filter-restaurants.ts     SQL: neighborhood, cuisine, price tier, veg, hours
+  filter-restaurants.ts     SQL: city, state, neighborhood, cuisine, price tier, veg, hours
   search-opinions.ts        Pinecone semantic search + cross-encoder rerank
   get-restaurant-details.ts single-entity lookup (returns BOTH facts and reviews)
   hours.ts                  pure open/close predicates — no I/O, unit-tested
@@ -121,6 +164,15 @@ src/lib/agent/
   index.ts                  manual tool-calling loop over the Responses API
   tools.ts                  zod schemas -> JSON Schema defs + runtime validation
   system-prompt.ts          scope, refusal rules, price-tier legend
+src/lib/                  on-demand crawl — none of it reachable from the agent
+  dataset.ts                scopes the SQL tools to seed or crawled, by env
+  coverage.ts               "do we know this city?" — one COUNT
+  location.ts               parse "Austin, TX", read city/state from an address, scope slugs
+  crawl-offer.ts            pure: did this turn come up empty?
+  crawl-trigger.ts          the single gate between a location and money
+  crawl-limits.ts           daily cap + 24h miss memory, in-process
+  crawler.ts                client for the crawler service, zod at the boundary
+  import-crawl.ts           crawl payload -> Restaurant + Review rows
 scripts/ingest/
   embed-upsert.ts           chunk + embed + upsert reviews
 evals/
@@ -134,7 +186,11 @@ tests/                    node:test + tsx, no new dependency
   hours.test.ts             open/close boundary conditions
   search-filter.test.ts     Pinecone metadata filter branching
   logger.test.ts            level filtering and field formatting
+  crawl-offer.test.ts       which turns may start a crawl
+  location.test.ts          location parsing and slug scoping
+  dataset.test.ts           env scoping, including unset meaning no filter
 docs/
+  README.md                 index — every doc has a status; half are DESIGN ONLY
   taxonomy.md               6 query categories
   data-manifest.md          slug -> real restaurant mapping
   status.md                 running project status
@@ -169,6 +225,37 @@ No comment should restate the line below it.
 **Absence of data is a feature.** The schema deliberately has no reservations,
 parking, or wait-time fields. Do not add them. Their absence is what makes the
 refusal goldens (G16/G17/G20) gradable instead of untested.
+
+**Only an answer to the neighborhood ask may start a crawl.** `/api/chat` takes
+`answeringNeighborhood`, true only when the ask was on screen when the message was
+sent. Any place name used to be enough, and "near Brooklyn" duly spent a crawl on a
+borough — bad data, since a `neighborhood: "Brooklyn"` row overlaps four
+neighborhoods we already have and matches only the literal word. Coverage is 0 for
+a borough, a city, a typo and a vague phrase alike, so consent has to come from the
+conversation, not from the string.
+
+**The crawl trigger lives in the route, never in the agent.** `/api/chat` decides
+whether a turn starts a crawl; nothing in `src/lib/agent/` may import
+`crawl-trigger.ts` or `crawl-offer.ts`. `evals/runner.ts` calls `runAgent`
+directly, so this is the only thing stopping an eval run from spending money —
+G19 ("best ramen shop in tokyo") now calls `filter_restaurants` with
+`neighborhood: "Tokyo"`, and would crawl on every run if the trigger moved.
+
+**Restart the web container after every schema change.** `next dev` caches the
+generated Prisma client, so a fresh `prisma generate` does not reach the running
+server. This bit twice on 2026-08-13/14, and both times the checks looked green
+because `tsc` and `npx tsx` read the new client off disk while only the *running
+app* was broken — the failure surfaces as `Unknown argument \`city\`` from a route,
+never from a test. If a route reports a column the schema plainly has, restart
+before debugging anything else.
+
+**`embed-upsert.ts` with no argument writes the authored corpus only.** It used
+to embed *every* review into the default namespace, which was harmless when
+authored reviews were the only ones and silently contaminated the eval's corpus
+once there were three. On 2026-08-14 a no-arg run took `__default__` from 36
+records to 120 by mixing in `web-research` and `crawled`. Namespaces are the
+whole basis of the three-corpus measurement — check
+`scripts/pinecone-stats.ts` after any ingest.
 
 **Never write review content to make a golden pass.** That is how the eval became
 circular in the first place. New review text belongs in
@@ -307,14 +394,59 @@ At 20 restaurants a 20-candidate pool is most of the namespace, so the reranker
 is effectively doing retrieval rather than refining it. Fine here; not what the
 design would look like at scale.
 
+**Crawled rows are isolated from the eval — resolved 2026-08-13.** A chat turn that
+finds nothing asks for a neighborhood, and naming one crawls it, so ordinary use
+writes into the same `Restaurant` table the SQL tools read. `Restaurant.dataset` is
+`seed` or `crawled`; `datasetWhere()` reads `RESTAURANT_DATASET` and scopes
+`buildWhere` and `getRestaurantDetails`. Unset means no filter, so the app sees
+everything; `evals/runner.ts` sets it to `seed` itself rather than relying on a CLI
+flag. Measured: unset 25 restaurants, `seed` 20, `crawled` 5.
+
+**`getCoverage` is deliberately unscoped.** It decides whether to spend money and
+must count crawled rows — scope it and a neighborhood we just fetched reads as
+uncovered and gets crawled again on the next visit.
+
+The vector path was already isolated: crawled reviews go to the `crawled` namespace,
+which the eval never reads.
+
+**The prompt must look before it refuses.** `SYSTEM_PROMPT` tells the agent to call
+`filter_restaurants` with an unrecognised neighborhood and use the empty result as
+confirmation before declaring it out of scope. Load-bearing, not stylistic: crawl
+detection reads the neighborhood out of tool-call arguments, and while the prompt
+refused from its own list the agent called no tool at all, so the crawl could never
+fire. It also aligns the prompt with the enum removal in
+`feat/unrestricted-neighborhood`, which had intended this since 2026-08-12.
+
+**The prompt must not recite a neighborhood list or a restaurant count.** Fixed on
+2026-08-13, when "what neighborhoods do you cover?" answered "East Village,
+Flushing, Williamsburg, Harlem, and Astoria" with no tool call, omitting all three
+crawled neighborhoods. No hardcoded number can be right: `RESTAURANT_DATASET` makes
+the true answer 5 and 20 for the eval but 8 and 25 for the app. Coverage questions
+are answered by calling `filter_restaurants` with no filters. Verified in both
+scopes — put a list back and the agent will be wrong in whichever context you were
+not thinking about.
+
 **Decided: Prisma only.** The original architecture sketch specified drizzle;
 that is superseded. Do not introduce drizzle or a second ORM.
 
 **Unresolved:** the monorepo split (`python-scraper/` + `nextjs-rag/` was
 planned; this is a flat repo).
 
-**The deployed app is not functional.** `restaurant-rag.vercel.app` serves the
-UI, but `/api/chat` returns a credentials error — Vercel has no environment
-variables set, and `DATABASE_URL` points at the Docker-internal `db:5432`, so a
-hosted Postgres is needed before the agent can run in production. Pinecone is
-already hosted and populated. Local (`docker compose up`) is the working system.
+**The deployed app works — resolved 2026-08-14.** `restaurant-rag.vercel.app`
+answers with grounded results against a hosted Neon Postgres. Migrations run in
+the Vercel build (`vercel.json`), against the **unpooled** Neon URL, so a schema
+change reaches production with the deploy that needs it and a failed migration
+fails the build rather than leaving code and schema disagreeing. See
+`docs/deployment.md`.
+
+**Production does not use the LiteLLM proxy.** `OPENAI_BASE_URL` is unset on
+Vercel and `OPENAI_API_KEY` is a real OpenAI key, so the per-student budget
+cannot take the deployed app down. Local development still goes through the
+proxy, which means the budget failure mode described above applies to the eval
+and to `docker compose`, not to production.
+
+**The crawler is a separate deployment and may be down.** `CRAWLER_URL` points at
+a Fly app outside this repo. `/api/chat` returns `crawlUnavailable: true`
+alongside a normal answer when it cannot be reached, so a dead crawler degrades
+the crawl feature without breaking chat. Verified against an unreachable crawler
+on 2026-08-14.

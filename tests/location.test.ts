@@ -1,0 +1,220 @@
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import {
+  normalizeAddress,
+  parseAddressLocation,
+  parseLocation,
+  scopeSlug,
+} from "../src/lib/location";
+
+describe("parseLocation", () => {
+  test("city and state", () => {
+    assert.deepEqual(parseLocation("Austin, TX"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("neighborhood, city and state", () => {
+    assert.deepEqual(parseLocation("South Congress, Austin, TX"), {
+      neighborhood: "South Congress",
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("city alone is still usable - the crawler can resolve it", () => {
+    assert.deepEqual(parseLocation("Austin"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "",
+    });
+  });
+
+  test("state is upper-cased so TX and tx agree", () => {
+    assert.deepEqual(parseLocation("austin, tx"), {
+      neighborhood: null,
+      city: "austin",
+      state: "TX",
+    });
+  });
+
+  test("extra whitespace is trimmed", () => {
+    assert.deepEqual(parseLocation("  Austin ,  TX  "), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("empty segments are dropped", () => {
+    assert.deepEqual(parseLocation("Austin,,TX"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("more than three parts keeps the first as the neighborhood", () => {
+    assert.deepEqual(parseLocation("South Congress, Travis County, Austin, TX"), {
+      neighborhood: "South Congress",
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  // Boroughs read as cities, which is correct: Brooklyn is what the crawler and
+  // Google both use in an address, and it stops "Brooklyn" becoming a fake
+  // neighborhood the way it did on 2026-08-13.
+  test("a borough is treated as the city", () => {
+    assert.deepEqual(parseLocation("Brooklyn, NY"), {
+      neighborhood: null,
+      city: "Brooklyn",
+      state: "NY",
+    });
+  });
+
+  test("a two-letter city with no state is a city, not a state", () => {
+    assert.deepEqual(parseLocation("Ely"), { neighborhood: null, city: "Ely", state: "" });
+  });
+
+  test("a leading preposition is stripped", () => {
+    assert.deepEqual(parseLocation("in mable grove"), {
+      neighborhood: null,
+      city: "mable grove",
+      state: "",
+    });
+    assert.deepEqual(parseLocation("near Austin, TX"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+    assert.deepEqual(parseLocation("around Dallas"), {
+      neighborhood: null,
+      city: "Dallas",
+      state: "",
+    });
+  });
+
+  test("a preposition that starts a real name is not stripped", () => {
+    assert.deepEqual(parseLocation("Independence, MO"), {
+      neighborhood: null,
+      city: "Independence",
+      state: "MO",
+    });
+  });
+
+  test("trailing punctuation is dropped", () => {
+    assert.deepEqual(parseLocation("Austin, TX?"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("a sentence is not a location", () => {
+    assert.equal(parseLocation("i am looking for a good korean bbq spot tonight"), null);
+  });
+
+  test("names of a plausible length still parse", () => {
+    assert.deepEqual(parseLocation("Truth or Consequences, NM"), {
+      neighborhood: null,
+      city: "Truth or Consequences",
+      state: "NM",
+    });
+  });
+
+  test("a bare state has no city to crawl", () => {
+    assert.equal(parseLocation("TX"), null);
+  });
+
+  test("empty input", () => {
+    assert.equal(parseLocation(""), null);
+    assert.equal(parseLocation("   "), null);
+    assert.equal(parseLocation(",,,"), null);
+  });
+});
+
+describe("parseAddressLocation", () => {
+  test("a Google address with the USA suffix", () => {
+    assert.deepEqual(parseAddressLocation("1722 S Congress Ave, Austin, TX 78704, USA"), {
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("a seeded address without the suffix", () => {
+    assert.deepEqual(parseAddressLocation("150 E 14th St, New York, NY 10003"), {
+      city: "New York",
+      state: "NY",
+    });
+  });
+
+  test("a zip+4", () => {
+    assert.deepEqual(parseAddressLocation("1 Main St, Dallas, TX 75201-1234, USA"), {
+      city: "Dallas",
+      state: "TX",
+    });
+  });
+
+  test("a state with no zip", () => {
+    assert.deepEqual(parseAddressLocation("500 Sutter St, San Francisco, CA"), {
+      city: "San Francisco",
+      state: "CA",
+    });
+  });
+
+  test("an unparseable address yields empties rather than guessing", () => {
+    assert.deepEqual(parseAddressLocation("somewhere"), { city: "", state: "" });
+    assert.deepEqual(parseAddressLocation(""), { city: "", state: "" });
+  });
+});
+
+describe("scopeSlug", () => {
+  test("namespaces by state and city so South Congress cannot collide with SoHo", () => {
+    const austin = { neighborhood: "South Congress", city: "Austin", state: "TX" };
+    const manhattan = { neighborhood: "SoHo", city: "New York", state: "NY" };
+    assert.equal(scopeSlug("so-junes", austin), "tx-austin-so-junes");
+    assert.equal(scopeSlug("so-junes", manhattan), "ny-new-york-so-junes");
+  });
+
+  test("is stable, so a re-crawl upserts rather than duplicating", () => {
+    const location = { neighborhood: null, city: "Austin", state: "TX" };
+    assert.equal(scopeSlug("so-junes", location), scopeSlug("so-junes", location));
+  });
+
+  test("skips a missing state", () => {
+    assert.equal(scopeSlug("so-junes", { neighborhood: null, city: "Austin", state: "" }), "austin-so-junes");
+  });
+});
+
+describe("normalizeAddress", () => {
+  test("the USA suffix does not change identity", () => {
+    assert.equal(
+      normalizeAddress("1722 S Congress Ave, Austin, TX 78704, USA"),
+      normalizeAddress("1722 S Congress Ave, Austin, TX 78704"),
+    );
+  });
+
+  test("punctuation, case and spacing do not change identity", () => {
+    assert.equal(
+      normalizeAddress("150 E 14th St, New York, NY 10003"),
+      normalizeAddress("150 e 14th st  new york ny 10003"),
+    );
+  });
+
+  test("different addresses stay different", () => {
+    assert.notEqual(
+      normalizeAddress("1722 S Congress Ave, Austin, TX 78704"),
+      normalizeAddress("1400 S Congress Ave, Austin, TX 78704"),
+    );
+  });
+
+  test("a different unit number is a different address", () => {
+    assert.notEqual(
+      normalizeAddress("2214 Flatbush Ave, Brooklyn, NY 11234"),
+      normalizeAddress("2216 Flatbush Ave, Brooklyn, NY 11234"),
+    );
+  });
+});

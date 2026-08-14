@@ -1,8 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Composer } from "./Composer";
 import { MessageList, type ChatMessage } from "./MessageList";
+import { NeighborhoodAsk } from "./NeighborhoodAsk";
+import { CrawlProgress } from "./CrawlProgress";
+import type { ChatResponse, CrawlJobStatus } from "@/lib/chat-contract";
+import { describeLocation, parseLocation } from "@/lib/location";
 
 const PROMPT_CHIPS = [
   "quiet spot for a first date",
@@ -10,11 +14,89 @@ const PROMPT_CHIPS = [
   "open past midnight downtown",
 ];
 
+type PendingCrawl = {
+  jobId: string;
+  location: string;
+  question: string;
+  status: string;
+  completed: number;
+  total: number;
+};
+
 export function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [pendingCrawl, setPendingCrawl] = useState<PendingCrawl | null>(null);
+
+  const [needsNeighborhood, setNeedsNeighborhood] = useState(false);
+  const [knownNeighborhoods, setKnownNeighborhoods] = useState<string[]>([]);
+  // The question that triggered the ask, so it can be re-offered once a crawl lands.
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  // Asked for once, then sent with every turn so the agent stops asking.
+  const [sessionLocation, setSessionLocation] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/neighborhoods")
+      .then((response) => response.json())
+      .then((data) => setKnownNeighborhoods(data.neighborhoods ?? []))
+      .catch(() => setKnownNeighborhoods([]));
+  }, []);
+
+  useEffect(() => {
+    if (!pendingCrawl || pendingCrawl.status === "succeeded" || pendingCrawl.status === "failed") {
+      return;
+    }
+
+    const jobId = pendingCrawl.jobId;
+    let cancelled = false;
+
+    const timer = setInterval(async () => {
+      let job: CrawlJobStatus;
+      try {
+        const response = await fetch(`/api/crawl/${jobId}`);
+        job = (await response.json()) as CrawlJobStatus;
+      } catch {
+        return;
+      }
+      if (cancelled) return;
+
+      setPendingCrawl((current) => {
+        if (!current || current.jobId !== jobId) return current;
+        return {
+          ...current,
+          status: job.status ?? current.status,
+          completed: job.progress?.completed ?? current.completed,
+          total: job.progress?.total ?? current.total,
+        };
+      });
+
+      // Waits for imported, not just succeeded: the job can succeed at the
+      // crawler while the import into Postgres fails, and announcing the
+      // neighborhood is ready then would be a lie.
+      if (job.status === "succeeded" && job.imported) {
+        // Cleared here, not just by the effect re-running, so a poll already in
+        // flight cannot append the completion message a second time.
+        clearInterval(timer);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `I've got ${pendingCrawl.location} now — want me to look at "${pendingCrawl.question}" again?`,
+          },
+        ]);
+        setDraft(pendingCrawl.question);
+        setPendingQuestion(null);
+      }
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [pendingCrawl]);
 
   async function handleSend(text: string) {
     if (isThinking) return;
@@ -25,16 +107,60 @@ export function ChatContainer() {
     setDraft("");
     setIsThinking(true);
 
+    // Only a reply to the ask sets the session location. parseLocation is
+    // permissive by design - it treats a bare word as a city - so parsing every
+    // message would make "good korea bbq spot" the user's location.
+    if (needsNeighborhood) {
+      const named = parseLocation(text);
+      if (named) setSessionLocation(describeLocation(named));
+    }
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
+        // The ask being on screen is what makes this message an answer to it,
+        // and an answer is the only thing allowed to start a crawl.
+        body: JSON.stringify({
+          message: text,
+          history,
+          answeringNeighborhood: needsNeighborhood,
+          location: sessionLocation ?? undefined,
+        }),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as ChatResponse;
       const content = response.ok && data.text ? data.text : "Sorry, I hit an error answering that. Try again?";
       const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : undefined;
+      if (data.needsNeighborhood) {
+        setNeedsNeighborhood(true);
+        setPendingQuestion(text);
+      } else {
+        setNeedsNeighborhood(false);
+      }
+      // The location was fetchable but the service is down. Say so, rather than
+      // leaving a bare "I don't have that" with no explanation.
+      if (data.crawlUnavailable) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "I couldn't reach the service that fetches new places, so I can't add that one right now.",
+          },
+        ]);
+      }
+      if (data.crawl) {
+        setNeedsNeighborhood(false);
+        setPendingCrawl({
+          jobId: data.crawl.jobId,
+          location: data.crawl.location,
+          question: pendingQuestion ?? text,
+          status: "queued",
+          completed: 0,
+          total: 0,
+        });
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -60,7 +186,7 @@ export function ChatContainer() {
   }
 
   return (
-    <main className="flex h-dvh flex-col bg-background text-foreground">
+    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4">
         {messages.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
@@ -82,6 +208,20 @@ export function ChatContainer() {
           </div>
         ) : (
           <MessageList messages={messages} isThinking={isThinking} />
+        )}
+        {pendingCrawl && pendingCrawl.status !== "succeeded" && (
+          <CrawlProgress
+            location={pendingCrawl.location}
+            status={pendingCrawl.status}
+            completed={pendingCrawl.completed}
+            total={pendingCrawl.total}
+          />
+        )}
+        {needsNeighborhood && (
+          <NeighborhoodAsk
+            neighborhoods={knownNeighborhoods}
+            onPick={handleChipClick}
+          />
         )}
         <Composer
           ref={textareaRef}

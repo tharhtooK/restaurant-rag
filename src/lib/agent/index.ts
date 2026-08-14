@@ -5,10 +5,12 @@ import type {
 } from "openai/resources/responses/responses";
 import { getOpenAI } from "@/lib/openai";
 import { getLogger } from "@/lib/logger";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { buildSystemPrompt } from "./system-prompt";
 import { toolDefinitions, runTool } from "./tools";
 
-const MODEL = "gpt-5.6-terra";
+// Overridable so a different provider is an .env change rather than a source
+// edit: gpt-5.6-terra is a LiteLLM alias and does not exist on api.openai.com.
+const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 const MAX_TOOL_ITERATIONS = 8;
 
 const log = getLogger("agent");
@@ -59,15 +61,22 @@ async function executeToolCall(call: ResponseFunctionToolCall): Promise<ToolCall
   return { name: call.name, input: args, output };
 }
 
-export async function runAgent(userMessage: string, history: ChatTurn[] = []): Promise<AgentResult> {
+export type RunAgentOptions = { location?: string };
+
+export async function runAgent(
+  userMessage: string,
+  history: ChatTurn[] = [],
+  options: RunAgentOptions = {},
+): Promise<AgentResult> {
   const toolCalls: ToolCallRecord[] = [];
   const input = buildInput(userMessage, history);
+  const instructions = buildSystemPrompt(options.location);
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const started = Date.now();
     const response = await getOpenAI().responses.create({
       model: MODEL,
-      instructions: SYSTEM_PROMPT,
+      instructions,
       tools: toolDefinitions,
       input,
     });

@@ -1,5 +1,7 @@
 # Query Taxonomy — Restaurant RAG Golden Set (v1)
 
+> **Status** Reference · shipped — the 6 categories the goldens use · **Updated** 2026-08-12 · **Version** v1
+
 Scope: NYC, 5 neighborhoods (East Village, Flushing, Williamsburg, Harlem, Astoria), ~50 restaurants.
 Retrieval: Postgres (structured) + Pinecone (semantic over reviews/menus/Reddit prose).
 Agent pattern: single router + tool-calling agent.

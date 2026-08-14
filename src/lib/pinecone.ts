@@ -7,7 +7,10 @@ export const EMBEDDING_DIMENSIONS = 1536;
 export type ReviewVectorMetadata = {
   restaurantSlug: string;
   restaurantName: string;
+  /** Empty string where a restaurant has no neighborhood: Pinecone metadata cannot hold null. */
   neighborhood: string;
+  city: string;
+  state: string;
   source: string;
   content: string;
 };

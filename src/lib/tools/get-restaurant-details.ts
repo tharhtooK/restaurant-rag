@@ -1,3 +1,4 @@
+import { datasetWhere } from "@/lib/dataset";
 import { prisma } from "@/lib/db";
 import { Hours } from "./types";
 
@@ -10,7 +11,9 @@ export type GetRestaurantDetailsInput = {
 export type RestaurantDetails = {
   slug: string;
   name: string;
-  neighborhood: string;
+  neighborhood: string | null;
+  city: string;
+  state: string;
   cuisine: string;
   priceTier: number;
   address: string;
@@ -28,9 +31,12 @@ export async function getRestaurantDetails(
   input: GetRestaurantDetailsInput,
 ): Promise<RestaurantDetails> {
   const row = await prisma.restaurant.findFirst({
-    where: input.slug
-      ? { slug: input.slug }
-      : { name: { contains: input.name ?? "", mode: "insensitive" } },
+    where: {
+      ...datasetWhere(),
+      ...(input.slug
+        ? { slug: input.slug }
+        : { name: { contains: input.name ?? "", mode: "insensitive" } }),
+    },
     include: { reviews: true },
   });
 
@@ -40,6 +46,8 @@ export async function getRestaurantDetails(
     slug: row.slug,
     name: row.name,
     neighborhood: row.neighborhood,
+    city: row.city,
+    state: row.state,
     cuisine: row.cuisine,
     priceTier: row.priceTier,
     address: row.address,

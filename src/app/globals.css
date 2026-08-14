@@ -26,3 +26,12 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Scrolling still works; only the bar is hidden. Keyboard scrolling and focus
+   are untouched, so this costs the visual affordance and nothing else. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

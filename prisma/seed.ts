@@ -9,7 +9,10 @@ const prisma = new PrismaClient({ adapter });
 
 async function main() {
   for (const r of restaurants) {
-    const { reviews, ...restaurantFields } = r;
+    const { reviews, ...seedData } = r;
+    // Set explicitly rather than leaning on the column default, so changing that
+    // default can never silently reclassify the corpus the eval is graded against.
+    const restaurantFields = { ...seedData, dataset: "seed", city: "New York", state: "NY" };
 
     const restaurant = await prisma.restaurant.upsert({
       where: { slug: r.slug },
