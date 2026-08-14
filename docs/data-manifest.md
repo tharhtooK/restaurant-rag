@@ -1,5 +1,7 @@
 # Data Manifest — Golden Slug → Real Restaurant (Step 3)
 
+> **Status** Reference · shipped — slug → real restaurant mapping · **Updated** 2026-08-12 · **Version** v1
+
 Maps the 20 invented placeholder slugs in [`evals/golden.json`](../evals/golden.json) to real,
 verifiable NYC restaurants, researched via web search (no Google Places/Foursquare/Reddit API
 access in this pass — see caveats below).
