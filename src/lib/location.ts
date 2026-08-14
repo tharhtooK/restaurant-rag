@@ -13,8 +13,19 @@ export type Location = {
 
 const STATE_CODE = /^[A-Za-z]{2}$/;
 
+// "in mable grove" was stored as a city called exactly that on 2026-08-14, and
+// the crawl it triggered came back full of Brooklyn restaurants. The trailing
+// space matters: it stops "Independence" losing its first two letters.
+const LEADING_PREPOSITION = /^(?:in|near|around|at|by)\s+/i;
+
+// A place name, not a sentence. Four words covers "Truth or Consequences" and
+// "Coeur d'Alene" while rejecting a question the user typed by mistake.
+const MAX_WORDS_IN_CITY = 4;
+
 export function parseLocation(input: string): Location | null {
-  const parts = input
+  const cleaned = input.trim().replace(/[?!.]+$/, "").replace(LEADING_PREPOSITION, "");
+
+  const parts = cleaned
     .split(",")
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
@@ -32,6 +43,8 @@ export function parseLocation(input: string): Location | null {
   if (rest.length === 0) return null;
 
   const city = rest[rest.length - 1];
+  if (city.split(/\s+/).length > MAX_WORDS_IN_CITY) return null;
+
   const neighborhood = rest.length > 1 ? rest[0] : null;
 
   return { neighborhood, city, state };

@@ -74,6 +74,52 @@ describe("parseLocation", () => {
     assert.deepEqual(parseLocation("Ely"), { neighborhood: null, city: "Ely", state: "" });
   });
 
+  test("a leading preposition is stripped", () => {
+    assert.deepEqual(parseLocation("in mable grove"), {
+      neighborhood: null,
+      city: "mable grove",
+      state: "",
+    });
+    assert.deepEqual(parseLocation("near Austin, TX"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+    assert.deepEqual(parseLocation("around Dallas"), {
+      neighborhood: null,
+      city: "Dallas",
+      state: "",
+    });
+  });
+
+  test("a preposition that starts a real name is not stripped", () => {
+    assert.deepEqual(parseLocation("Independence, MO"), {
+      neighborhood: null,
+      city: "Independence",
+      state: "MO",
+    });
+  });
+
+  test("trailing punctuation is dropped", () => {
+    assert.deepEqual(parseLocation("Austin, TX?"), {
+      neighborhood: null,
+      city: "Austin",
+      state: "TX",
+    });
+  });
+
+  test("a sentence is not a location", () => {
+    assert.equal(parseLocation("i am looking for a good korean bbq spot tonight"), null);
+  });
+
+  test("names of a plausible length still parse", () => {
+    assert.deepEqual(parseLocation("Truth or Consequences, NM"), {
+      neighborhood: null,
+      city: "Truth or Consequences",
+      state: "NM",
+    });
+  });
+
   test("a bare state has no city to crawl", () => {
     assert.equal(parseLocation("TX"), null);
   });

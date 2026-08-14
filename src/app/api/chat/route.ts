@@ -86,7 +86,13 @@ export async function POST(request: Request) {
       }
     }
 
-    if (hadEmptyResult(result.toolCalls)) {
+    // Two ways a turn can need a location from the user: a lookup came back
+    // empty, or the agent asked for one in prose instead of searching. The
+    // second calls no tools at all, and without catching it the reply is not
+    // treated as an answer - which is how "minesota" was silently dropped.
+    const askedInProse = !parsed.data.location && result.toolCalls.length === 0;
+
+    if (hadEmptyResult(result.toolCalls) || askedInProse) {
       const body: ChatResponse = { ...result, needsNeighborhood: true };
       return NextResponse.json(body);
     }
