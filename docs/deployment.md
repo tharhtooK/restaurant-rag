@@ -33,8 +33,17 @@ manual `migrate deploy` in Step 3 unnecessary for subsequent deploys.
 **The crawler service is a separate deployment.** `CRAWLER_URL` points at a Fly
 app (`restaurant-crawler-cqfv-w.fly.dev`), which is outside this repo and can be
 down independently. `/api/chat` handles that: it returns `crawlUnavailable: true`
-with a normal answer rather than failing the turn. Verified 2026-08-14 while the
-Fly app was unreachable.
+with a normal answer rather than failing the turn — verified 2026-08-14.
+
+That app **scales to zero and is slow to wake**. A cold request can exceed a
+20-second timeout and look exactly like an outage; on 2026-08-14 it was read as
+one. `/health` returns `{"ok":true}` once warm, and `/` returns 404 by design —
+there is no route there, so 404 is a sign of life, not a fault. Give it 60
+seconds before concluding anything.
+
+**A full crawl was run end to end against production on 2026-08-14** — three
+Austin restaurants, imported and tagged `crawled`. That run is what surfaced the
+serverless embedding bug recorded in `CLAUDE.md`.
 
 Use the alias `restaurant-rag.vercel.app`, never a
 `restaurant-<hash>-<scope>.vercel.app` URL — those are immutable per-deployment

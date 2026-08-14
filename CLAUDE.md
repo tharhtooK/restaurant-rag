@@ -119,7 +119,7 @@ docker compose logs -f web
 # checks — run all three before every commit
 docker compose exec web npx tsc --noEmit
 docker compose exec web npm run lint
-docker compose exec web npm test           # 129 unit tests, ~0.5s, no network
+docker compose exec web npm test           # 143 unit tests, ~0.5s, no network
 ```
 
 ```bash
@@ -173,8 +173,9 @@ src/lib/                  on-demand crawl — none of it reachable from the agen
   crawl-limits.ts           daily cap + 24h miss memory, in-process
   crawler.ts                client for the crawler service, zod at the boundary
   import-crawl.ts           crawl payload -> Restaurant + Review rows
+  embed-reviews.ts          chunk + embed + upsert; shared with the ingest CLI
 scripts/ingest/
-  embed-upsert.ts           chunk + embed + upsert reviews
+  embed-upsert.ts           CLI over src/lib/embed-reviews.ts
 evals/
   golden.json               20 graded queries
   runner.ts                 orchestration + CLI only
@@ -189,6 +190,7 @@ tests/                    node:test + tsx, no new dependency
   crawl-offer.test.ts       which turns may start a crawl
   location.test.ts          location parsing and slug scoping
   dataset.test.ts           env scoping, including unset meaning no filter
+  embed-reviews.test.ts     which reviews go to which Pinecone namespace
 docs/
   README.md                 index — every doc has a status; half are DESIGN ONLY
   taxonomy.md               6 query categories
@@ -217,6 +219,17 @@ a silent no-op if it hadn't turned out to patch the Responses API.
 
 **Verify, don't assert.** A change is not done because it type-checks. Run it.
 Where behavior is claimed, produce the output that proves it.
+
+**A route may never spawn a subprocess.** `/api/crawl/[jobId]` reached the
+embedding step with `spawn("npx", ["tsx", "scripts/ingest/embed-upsert.ts"])`,
+which is fine under Docker and impossible on Vercel: the traced bundle has no
+`npx`, no `tsx`, no `scripts/`, and a read-only filesystem. It failed only in
+production, and failed *after* the Postgres rows were written, so crawled
+restaurants answered `filter_restaurants` while being invisible to
+`search_opinions` — and the poll returned an empty 500 forever. Share the logic
+as a module both the route and the CLI import; `embed-reviews.ts` and
+`import-crawl.ts` are the shape to copy. Anything that works because the repo
+happens to be on disk is a local-only feature.
 
 **Comments explain *why*, never *what*.** Existing comments in `evals/runner.ts`
 and `search-opinions.ts` document *interpretation decisions* — that is the bar.
