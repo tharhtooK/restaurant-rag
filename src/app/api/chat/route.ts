@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runAgent } from "@/lib/agent";
 import { getLogger } from "@/lib/logger";
-import { hadEmptyResult } from "@/lib/crawl-offer";
+import { hadEmptyResult, isSpecificEnoughToCrawl } from "@/lib/crawl-offer";
 import { describeLocation, parseLocation } from "@/lib/location";
 import { startCrawlIfEligible } from "@/lib/crawl-trigger";
 import type { ChatResponse } from "@/lib/chat-contract";
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     // the model cannot redirect what gets crawled.
     if (parsed.data.answeringNeighborhood) {
       const location = parseLocation(message);
-      if (location) {
+      if (location && isSpecificEnoughToCrawl(location)) {
         const label = describeLocation(location);
         const trigger = await startCrawlIfEligible(location);
         if (trigger.started) {

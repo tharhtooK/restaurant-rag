@@ -11,6 +11,9 @@ export type ReviewVectorMetadata = {
   neighborhood: string;
   city: string;
   state: string;
+  /** The twins the filters actually match on - see normalizeLocationValue. */
+  neighborhoodNormalized: string;
+  cityNormalized: string;
   source: string;
   content: string;
 };

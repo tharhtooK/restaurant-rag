@@ -1,5 +1,7 @@
 import { embedOne, getPineconeIndex, rerank, type RankedIndex } from "@/lib/pinecone";
 import { getLogger } from "@/lib/logger";
+import { normalizeLocationValue } from "@/lib/location";
+import { prisma } from "@/lib/db";
 
 const log = getLogger("search-opinions");
 
@@ -37,15 +39,21 @@ export type OpinionMatch = {
 
 /**
  * Pinecone metadata filters are exact and case-sensitive, with no equivalent of
- * Postgres' insensitive mode, so a neighborhood whose casing does not match what
- * was upserted returns nothing. The canonical spellings are in the system prompt,
- * which is where the model gets them.
+ * Postgres' insensitive mode, so matching the raw fields meant a neighborhood
+ * whose casing differed from the upsert returned nothing at all - "east village"
+ * scored 0 snippets where "East Village" scored 7. Matching the normalized twins
+ * instead makes city + neighborhood behave like the SQL path, and stops the
+ * canonical spellings in the system prompt from being load-bearing.
  */
 export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, unknown> | null {
   const filters: Record<string, unknown>[] = [];
-  if (input.neighborhood) filters.push({ neighborhood: { $eq: input.neighborhood } });
-  if (input.city) filters.push({ city: { $eq: input.city } });
-  if (input.state) filters.push({ state: { $eq: input.state } });
+  if (input.neighborhood) {
+    filters.push({ neighborhoodNormalized: { $eq: normalizeLocationValue(input.neighborhood) } });
+  }
+  if (input.city) {
+    filters.push({ cityNormalized: { $eq: normalizeLocationValue(input.city) } });
+  }
+  if (input.state) filters.push({ state: { $eq: input.state.toUpperCase() } });
   if (input.restaurantSlugs?.length) {
     filters.push({ restaurantSlug: { $in: input.restaurantSlugs } });
   }
@@ -55,12 +63,45 @@ export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, 
   return { $and: filters };
 }
 
-// PINECONE_NAMESPACE lets the eval point retrieval at an isolated corpus
-// (e.g. only independently-sourced reviews). Unset = the default namespace.
-function getSearchIndex() {
-  const base = getPineconeIndex();
-  const namespace = process.env.PINECONE_NAMESPACE;
-  return namespace ? base.namespace(namespace) : base;
+const CRAWLED_NAMESPACE = "crawled";
+
+/**
+ * Which corpora this search reads.
+ *
+ * PINECONE_NAMESPACE pins exactly one, which is how the eval points retrieval at
+ * the independently-sourced corpus. Unpinned, the app must read the crawled
+ * namespace as well as the default one: crawled reviews are embedded there, so
+ * reading only the default meant a city the user had just crawled answered
+ * filter_restaurants while search_opinions returned nothing - the same split
+ * between the SQL and vector paths that the serverless embedding bug caused,
+ * arriving by a different route.
+ *
+ * Scoped by RESTAURANT_DATASET rather than a flag of its own so the two paths
+ * are always excluded together: evals/runner.ts sets it to "seed" and therefore
+ * sees neither crawled rows nor crawled vectors.
+ */
+export function getSearchNamespaces(): (string | undefined)[] {
+  const pinned = process.env.PINECONE_NAMESPACE?.trim();
+  if (pinned) return [pinned];
+  if (process.env.RESTAURANT_DATASET?.trim()) return [undefined];
+  return [undefined, CRAWLED_NAMESPACE];
+}
+
+/**
+ * Drops snippets whose restaurant is no longer in Postgres.
+ *
+ * Nothing deletes a vector when its row goes, so the two stores drift: the
+ * crawled namespace currently holds 15 vectors for restaurants that are not in
+ * the database. Trusting metadata alone would hand the model a real-looking name
+ * and real-looking review text for a restaurant get_restaurant_details cannot
+ * find - a confident recommendation for somewhere that does not exist, which is
+ * the failure this project grades itself on.
+ */
+export function dropUnknownRestaurants(
+  candidates: OpinionMatch[],
+  knownSlugs: Set<string>,
+): OpinionMatch[] {
+  return candidates.filter((candidate) => knownSlugs.has(candidate.restaurantSlug));
 }
 
 /**
@@ -91,29 +132,56 @@ export async function searchOpinions(input: SearchOpinionsInput): Promise<Opinio
   const filter = buildMetadataFilter(input);
   const vector = await embedOne(input.query);
 
-  const response = await getSearchIndex().query({
-    vector,
-    topK: Math.max(CANDIDATE_POOL, limit),
-    includeMetadata: true,
-    ...(filter ? { filter } : {}),
-  });
+  const base = getPineconeIndex();
+  const responses = await Promise.all(
+    getSearchNamespaces().map((namespace) =>
+      (namespace ? base.namespace(namespace) : base).query({
+        vector,
+        topK: Math.max(CANDIDATE_POOL, limit),
+        includeMetadata: true,
+        ...(filter ? { filter } : {}),
+      }),
+    ),
+  );
 
-  const candidates = (response.matches ?? []).map((match) => ({
-    restaurantSlug: match.metadata?.restaurantSlug ?? "",
-    restaurantName: match.metadata?.restaurantName ?? "",
-    neighborhood: match.metadata?.neighborhood ?? "",
-    snippet: match.metadata?.content ?? "",
-    score: match.score ?? 0,
-  }));
+  // Each namespace ranks only against itself, so the union is unordered here.
+  // The cross-encoder below is what puts a crawled snippet and a seeded one on
+  // one scale - a raw cosine merge across namespaces would not be comparable.
+  const candidates = responses.flatMap((response) =>
+    (response.matches ?? []).map((match) => ({
+      restaurantSlug: match.metadata?.restaurantSlug ?? "",
+      restaurantName: match.metadata?.restaurantName ?? "",
+      neighborhood: match.metadata?.neighborhood ?? "",
+      snippet: match.metadata?.content ?? "",
+      score: match.score ?? 0,
+    })),
+  );
 
   if (candidates.length === 0) return [];
 
+  // Existence only, deliberately unscoped by dataset: which corpus this search
+  // may read is already decided by the namespace, and asking twice would drop a
+  // crawled restaurant the app is entitled to see.
+  const rows = await prisma.restaurant.findMany({
+    where: { slug: { in: candidates.map((candidate) => candidate.restaurantSlug) } },
+    select: { slug: true },
+  });
+  const grounded = dropUnknownRestaurants(candidates, new Set(rows.map((row) => row.slug)));
+
+  if (grounded.length < candidates.length) {
+    log.warn("dropped snippets with no restaurant row", {
+      dropped: candidates.length - grounded.length,
+      candidates: candidates.length,
+    });
+  }
+  if (grounded.length === 0) return [];
+
   const ranked = await rerank(
     input.query,
-    candidates.map((candidate) => candidate.snippet),
-    Math.min(limit, candidates.length),
+    grounded.map((candidate) => candidate.snippet),
+    Math.min(limit, grounded.length),
   );
-  log.debug("reranked candidates", { candidates: candidates.length, returned: ranked.length });
+  log.debug("reranked candidates", { candidates: grounded.length, returned: ranked.length });
 
-  return applyRanking(candidates, ranked);
+  return applyRanking(grounded, ranked);
 }

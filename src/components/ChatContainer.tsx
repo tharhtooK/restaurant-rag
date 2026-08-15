@@ -31,18 +31,10 @@ export function ChatContainer() {
   const [pendingCrawl, setPendingCrawl] = useState<PendingCrawl | null>(null);
 
   const [needsNeighborhood, setNeedsNeighborhood] = useState(false);
-  const [knownNeighborhoods, setKnownNeighborhoods] = useState<string[]>([]);
   // The question that triggered the ask, so it can be re-offered once a crawl lands.
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   // Asked for once, then sent with every turn so the agent stops asking.
   const [sessionLocation, setSessionLocation] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/neighborhoods")
-      .then((response) => response.json())
-      .then((data) => setKnownNeighborhoods(data.neighborhoods ?? []))
-      .catch(() => setKnownNeighborhoods([]));
-  }, []);
 
   useEffect(() => {
     if (!pendingCrawl || pendingCrawl.status === "succeeded" || pendingCrawl.status === "failed") {
@@ -217,12 +209,7 @@ export function ChatContainer() {
             total={pendingCrawl.total}
           />
         )}
-        {needsNeighborhood && (
-          <NeighborhoodAsk
-            neighborhoods={knownNeighborhoods}
-            onPick={handleChipClick}
-          />
-        )}
+        {needsNeighborhood && <NeighborhoodAsk />}
         <Composer
           ref={textareaRef}
           value={draft}

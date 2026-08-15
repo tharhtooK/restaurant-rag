@@ -38,10 +38,19 @@ eval tractable:
    and the app (8 and 25, after crawling Bushwick, Greenpoint and Red Hook). A
    coverage question is answered by calling `filter_restaurants`, not from memory.
 
-The five names remain in the prompt for one reason only: `search_opinions` needs
-canonical spellings because Pinecone metadata filters cannot match
-case-insensitively. Postgres matches `neighborhood` case-insensitively, so the SQL
-path does not care.
+The five names used to remain in the prompt for one reason: `search_opinions`
+needed canonical spellings, because a Pinecone metadata filter is an exact `$eq`
+with no equivalent of Postgres' insensitive mode. That reason is gone as of
+2026-08-15 — both the upsert and the filter normalize city and neighborhood, so
+casing no longer decides whether the vector path returns anything (see Code
+style). The names stay only as examples of what the corpus contains; neither
+retrieval path depends on their spelling now.
+
+`SYSTEM_PROMPT` has not caught up: it still tells the agent the metadata filter is
+case-sensitive and to use those exact spellings. Harmless — exact spellings still
+match — but no longer true, and it is the last thing keeping the five names
+load-bearing in the prompt. Deleting that clause is a prompt change, so it needs
+G05–G14 behind it rather than a docs edit.
 
 The refusal behaviour G18/G19/G20 grade is unchanged in outcome — an out-of-scope
 place is still refused, now with a lookup behind the refusal rather than a list.
@@ -92,6 +101,14 @@ runs get *faster*, check the budget before reading anything into the numbers.
 A full eval run is 40+ model calls (20 agent invocations plus 20 judge calls), so
 iterate with a single golden — `evals/runner.ts G01` — and save full runs for
 changes that actually touch the agent path.
+
+Match the subset to what changed. **G05–G14** are every golden that routes through
+`search_opinions` (vector-vibe, hybrid-filter, comparison), so a retrieval change
+is covered by ten goldens rather than twenty; sql-filter, fact-lookup and
+unanswerable do not depend on snippet content. A change to `/api/chat` needs
+**none at all** — `evals/runner.ts` calls `runAgent` directly and never goes
+through the route, which is the same fact that keeps the crawl trigger off the
+eval path.
 
 **Switching provider is an env change, not a code edit.** `OPENAI_MODEL`
 overrides the model for both the agent and the judge, defaulting to
@@ -168,7 +185,7 @@ src/lib/                  on-demand crawl — none of it reachable from the agen
   dataset.ts                scopes the SQL tools to seed or crawled, by env
   coverage.ts               "do we know this city?" — one COUNT
   location.ts               parse "Austin, TX", read city/state from an address, scope slugs
-  crawl-offer.ts            pure: did this turn come up empty?
+  crawl-offer.ts            pure: did this turn come up empty, and is the answer specific enough to crawl?
   crawl-trigger.ts          the single gate between a location and money
   crawl-limits.ts           daily cap + 24h miss memory, in-process
   crawler.ts                client for the crawler service, zod at the boundary
@@ -185,7 +202,7 @@ evals/
 tests/                    node:test + tsx, no new dependency
   scoring.test.ts           the eval's own scoring rules
   hours.test.ts             open/close boundary conditions
-  search-filter.test.ts     Pinecone metadata filter branching
+  search-filter.test.ts     Pinecone filter branching, namespace selection, stale-snippet drop
   logger.test.ts            level filtering and field formatting
   crawl-offer.test.ts       which turns may start a crawl
   location.test.ts          location parsing and slug scoping
@@ -235,6 +252,27 @@ happens to be on disk is a local-only feature.
 and `search-opinions.ts` document *interpretation decisions* — that is the bar.
 No comment should restate the line below it.
 
+**A Pinecone filter matches a normalized field, never a raw one.** Metadata
+filters are exact `$eq`; there is no insensitive mode and no substring operator.
+Filtering the raw field meant `neighborhood: "east village"` returned 0 snippets
+where `"East Village"` returned 7 — an empty result, not an error, so it read as
+"we have no data there" rather than as a bug. `normalizeLocationValue` is applied
+on both sides, by `embed-reviews.ts` on write and `buildMetadataFilter` on read;
+change one and you must re-upsert. This is also why `cuisine` is **not** a
+Pinecone filter: the column is free text with 24 values including `BBQ`,
+`Barbecue` and `Korean BBQ`, Postgres matches it with `contains`, and an `$eq`
+against it would silently return nothing for "bbq". A controlled vocabulary would
+have to come first.
+
+**Vector metadata is not a source of truth.** Nothing deletes a vector when its
+Postgres row goes, so the stores drift — the `crawled` namespace holds 15 vectors
+for restaurants that no longer exist. `search_opinions` joins candidate slugs
+against Postgres before reranking, because metadata carries a real name and real
+review text: passing one through would have the model recommend somewhere that
+`get_restaurant_details` then cannot find. Grounding is the thing this project is
+graded on, so the join stays even though a one-off vector cleanup would fix
+today's rows.
+
 **Absence of data is a feature.** The schema deliberately has no reservations,
 parking, or wait-time fields. Do not add them. Their absence is what makes the
 refusal goldens (G16/G17/G20) gradable instead of untested.
@@ -246,6 +284,17 @@ borough — bad data, since a `neighborhood: "Brooklyn"` row overlaps four
 neighborhoods we already have and matches only the literal word. Coverage is 0 for
 a borough, a city, a typo and a vague phrase alike, so consent has to come from the
 conversation, not from the string.
+
+Consent is necessary and not sufficient. The ask is armed by any turn that called
+no tools, which includes a greeting — the agent replies "what city are you looking
+to eat in?", fairly enough — and whatever was typed next was then read as a
+location. `parseLocation` is permissive by design, so "cheap ramen" parsed as a
+city of exactly that name and started a real crawl for it. `isSpecificEnoughToCrawl`
+(2026-08-15) requires a city plus either a state or a neighborhood, which is what
+`NeighborhoodAsk` already asks for in words. A bare city is refused for a second
+reason: "Portland" is two cities, so crawling one is the guess this feature exists
+to avoid. Two-part junk ("cheap ramen, please") still parses as crawlable and is
+the known residual hole.
 
 **The crawl trigger lives in the route, never in the agent.** `/api/chat` decides
 whether a turn starts a crawl; nothing in `src/lib/agent/` may import
@@ -419,8 +468,61 @@ flag. Measured: unset 25 restaurants, `seed` 20, `crawled` 5.
 must count crawled rows — scope it and a neighborhood we just fetched reads as
 uncovered and gets crawled again on the next visit.
 
-The vector path was already isolated: crawled reviews go to the `crawled` namespace,
-which the eval never reads.
+**A street answers today, but nothing supports streets.** Checked 2026-08-15;
+three separate things catch one, and none of them is a street feature:
+
+- a bare street cannot crawl. `parseLocation("182 N 10th St")` does read it as a
+  city of that name, but `isSpecificEnoughToCrawl` refuses it for having no state
+  and no neighborhood;
+- the agent disambiguates unprompted — "whats good on Bedford Ave" answers "which
+  city do you mean? Bedford Avenue is in several places", with no rule telling it
+  to;
+- street plus city answers correctly. "any good restaurants on East 5th Street in
+  manhattan" returns Tuome at 536 E 5th St. There is no street filter anywhere in
+  the code: `address` is on every `filter_restaurants` row, so the model reads the
+  street off the results it already has;
+- street plus a **covered** city cannot crawl, because `getCoverage` is keyed on
+  city — "5th Ave, New York, NY" finds New York covered and stops there.
+
+The third one works because the corpus is 30 rows. The model receives most of the
+table and scans it, which is a table scan in the context window rather than
+retrieval, and it stops working at a few hundred restaurants or as soon as a
+street crosses a neighborhood the model did not think to query. Do not describe
+this as street search.
+
+**The gap:** street plus an *uncovered* city — "Main St, Boise, ID" — is
+crawlable, and `startCrawlIfEligible` passes `location.neighborhood` as the
+crawler's neighborhood argument. `import-crawl.ts` discards that only when it
+equals the city, so "Main St" would be written to the `neighborhood` column. A
+street in the neighborhood dimension is the same defect as the
+`neighborhood: "Brooklyn"` borough row above: it overlaps real neighborhoods and
+matches only the literal string. It needs someone to name a street in a city we
+do not have, which is why it is recorded rather than fixed.
+
+Supporting streets properly is small — `street?: string` on
+`filterRestaurantsSchema` and `where.address = { contains: input.street, mode:
+"insensitive" }` — and needs no migration and nothing in Pinecone, where a full
+address would be high-cardinality noise. The cost is not the code: a new tool
+argument changes what the agent reaches for, so it wants G01-G04 and G08-G11
+behind it.
+
+The vector path was isolated too, and for a while over-isolated. Crawled reviews go
+to the `crawled` namespace, which the eval never reads — but the app did not read
+it either, so a city the user had just crawled answered `filter_restaurants` and
+returned nothing at all from `search_opinions`. Measured before the fix: a vibe
+query scoped to Austin scored 0 snippets while its restaurants sat in Postgres.
+That is the same split between the SQL and vector paths the serverless embedding
+bug produced, arriving by a different route — the rows land, the vectors are
+unreachable.
+
+`getSearchNamespaces()` (2026-08-15) reads the default **and** crawled namespaces
+when `PINECONE_NAMESPACE` is unpinned, and reranks the union: each namespace ranks
+only against itself, so raw cosine scores are not comparable across them, but the
+cross-encoder rescores every candidate on one scale. It is scoped by
+`RESTAURANT_DATASET` rather than a switch of its own, so the vector and SQL paths
+are excluded together — `evals/runner.ts` sets it to `seed` and sees neither.
+Verified in both scopes: unset, Austin returns 5 snippets; with `seed`, 0, while
+New York still returns 8.
 
 **The prompt must look before it refuses.** `SYSTEM_PROMPT` tells the agent to call
 `filter_restaurants` with an unrecognised neighborhood and use the empty result as
