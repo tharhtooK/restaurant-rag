@@ -468,6 +468,44 @@ flag. Measured: unset 25 restaurants, `seed` 20, `crawled` 5.
 must count crawled rows — scope it and a neighborhood we just fetched reads as
 uncovered and gets crawled again on the next visit.
 
+**A street answers today, but nothing supports streets.** Checked 2026-08-15;
+three separate things catch one, and none of them is a street feature:
+
+- a bare street cannot crawl. `parseLocation("182 N 10th St")` does read it as a
+  city of that name, but `isSpecificEnoughToCrawl` refuses it for having no state
+  and no neighborhood;
+- the agent disambiguates unprompted — "whats good on Bedford Ave" answers "which
+  city do you mean? Bedford Avenue is in several places", with no rule telling it
+  to;
+- street plus city answers correctly. "any good restaurants on East 5th Street in
+  manhattan" returns Tuome at 536 E 5th St. There is no street filter anywhere in
+  the code: `address` is on every `filter_restaurants` row, so the model reads the
+  street off the results it already has;
+- street plus a **covered** city cannot crawl, because `getCoverage` is keyed on
+  city — "5th Ave, New York, NY" finds New York covered and stops there.
+
+The third one works because the corpus is 30 rows. The model receives most of the
+table and scans it, which is a table scan in the context window rather than
+retrieval, and it stops working at a few hundred restaurants or as soon as a
+street crosses a neighborhood the model did not think to query. Do not describe
+this as street search.
+
+**The gap:** street plus an *uncovered* city — "Main St, Boise, ID" — is
+crawlable, and `startCrawlIfEligible` passes `location.neighborhood` as the
+crawler's neighborhood argument. `import-crawl.ts` discards that only when it
+equals the city, so "Main St" would be written to the `neighborhood` column. A
+street in the neighborhood dimension is the same defect as the
+`neighborhood: "Brooklyn"` borough row above: it overlaps real neighborhoods and
+matches only the literal string. It needs someone to name a street in a city we
+do not have, which is why it is recorded rather than fixed.
+
+Supporting streets properly is small — `street?: string` on
+`filterRestaurantsSchema` and `where.address = { contains: input.street, mode:
+"insensitive" }` — and needs no migration and nothing in Pinecone, where a full
+address would be high-cardinality noise. The cost is not the code: a new tool
+argument changes what the agent reaches for, so it wants G01-G04 and G08-G11
+behind it.
+
 The vector path was isolated too, and for a while over-isolated. Crawled reviews go
 to the `crawled` namespace, which the eval never reads — but the app did not read
 it either, so a city the user had just crawled answered `filter_restaurants` and
