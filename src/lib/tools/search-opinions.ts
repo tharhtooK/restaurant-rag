@@ -1,6 +1,7 @@
 import { embedOne, getPineconeIndex, rerank, type RankedIndex } from "@/lib/pinecone";
 import { getLogger } from "@/lib/logger";
 import { normalizeLocationValue } from "@/lib/location";
+import { prisma } from "@/lib/db";
 
 const log = getLogger("search-opinions");
 
@@ -87,6 +88,23 @@ export function getSearchNamespaces(): (string | undefined)[] {
 }
 
 /**
+ * Drops snippets whose restaurant is no longer in Postgres.
+ *
+ * Nothing deletes a vector when its row goes, so the two stores drift: the
+ * crawled namespace currently holds 15 vectors for restaurants that are not in
+ * the database. Trusting metadata alone would hand the model a real-looking name
+ * and real-looking review text for a restaurant get_restaurant_details cannot
+ * find - a confident recommendation for somewhere that does not exist, which is
+ * the failure this project grades itself on.
+ */
+export function dropUnknownRestaurants(
+  candidates: OpinionMatch[],
+  knownSlugs: Set<string>,
+): OpinionMatch[] {
+  return candidates.filter((candidate) => knownSlugs.has(candidate.restaurantSlug));
+}
+
+/**
  * `ranked` holds positions into `candidates`, so an out-of-range index would
  * silently shift every result onto the wrong restaurant. Skip rather than trust.
  */
@@ -141,12 +159,29 @@ export async function searchOpinions(input: SearchOpinionsInput): Promise<Opinio
 
   if (candidates.length === 0) return [];
 
+  // Existence only, deliberately unscoped by dataset: which corpus this search
+  // may read is already decided by the namespace, and asking twice would drop a
+  // crawled restaurant the app is entitled to see.
+  const rows = await prisma.restaurant.findMany({
+    where: { slug: { in: candidates.map((candidate) => candidate.restaurantSlug) } },
+    select: { slug: true },
+  });
+  const grounded = dropUnknownRestaurants(candidates, new Set(rows.map((row) => row.slug)));
+
+  if (grounded.length < candidates.length) {
+    log.warn("dropped snippets with no restaurant row", {
+      dropped: candidates.length - grounded.length,
+      candidates: candidates.length,
+    });
+  }
+  if (grounded.length === 0) return [];
+
   const ranked = await rerank(
     input.query,
-    candidates.map((candidate) => candidate.snippet),
-    Math.min(limit, candidates.length),
+    grounded.map((candidate) => candidate.snippet),
+    Math.min(limit, grounded.length),
   );
-  log.debug("reranked candidates", { candidates: candidates.length, returned: ranked.length });
+  log.debug("reranked candidates", { candidates: grounded.length, returned: ranked.length });
 
-  return applyRanking(candidates, ranked);
+  return applyRanking(grounded, ranked);
 }

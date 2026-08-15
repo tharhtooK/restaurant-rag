@@ -1,6 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { buildMetadataFilter, getSearchNamespaces } from "../src/lib/tools/search-opinions";
+import {
+  buildMetadataFilter,
+  dropUnknownRestaurants,
+  getSearchNamespaces,
+} from "../src/lib/tools/search-opinions";
 
 describe("buildMetadataFilter", () => {
   test("returns null when there is nothing to filter on", () => {
@@ -96,5 +100,41 @@ describe("getSearchNamespaces", () => {
     process.env.RESTAURANT_DATASET = "seed";
     assert.deepEqual(getSearchNamespaces(), ["web-research"]);
     restore();
+  });
+});
+
+describe("dropUnknownRestaurants", () => {
+  const snippet = (restaurantSlug: string) => ({
+    restaurantSlug,
+    restaurantName: restaurantSlug,
+    neighborhood: "",
+    snippet: "warm and busy",
+    score: 0.5,
+  });
+
+  // Vectors outlive the rows they describe, so a snippet can name a restaurant
+  // that is no longer in Postgres. Passing one on would put a real-sounding
+  // recommendation for a nonexistent place in front of the user.
+  test("keeps only snippets whose restaurant still exists", () => {
+    const kept = dropUnknownRestaurants(
+      [snippet("ev-tuome"), snippet("tx-austin-au-caroline"), snippet("hl-uptown-grill")],
+      new Set(["ev-tuome", "hl-uptown-grill"]),
+    );
+    assert.deepEqual(
+      kept.map((match) => match.restaurantSlug),
+      ["ev-tuome", "hl-uptown-grill"],
+    );
+  });
+
+  test("an entirely stale candidate set yields nothing rather than guessing", () => {
+    assert.deepEqual(dropUnknownRestaurants([snippet("gone")], new Set(["ev-tuome"])), []);
+  });
+
+  test("order is preserved for surviving snippets", () => {
+    const kept = dropUnknownRestaurants(
+      [snippet("b"), snippet("a")],
+      new Set(["a", "b"]),
+    );
+    assert.deepEqual(kept.map((match) => match.restaurantSlug), ["b", "a"]);
   });
 });
