@@ -38,19 +38,21 @@ eval tractable:
    and the app (8 and 25, after crawling Bushwick, Greenpoint and Red Hook). A
    coverage question is answered by calling `filter_restaurants`, not from memory.
 
-The five names used to remain in the prompt for one reason: `search_opinions`
-needed canonical spellings, because a Pinecone metadata filter is an exact `$eq`
-with no equivalent of Postgres' insensitive mode. That reason is gone as of
-2026-08-15 — both the upsert and the filter normalize city and neighborhood, so
-casing no longer decides whether the vector path returns anything (see Code
-style). The names stay only as examples of what the corpus contains; neither
-retrieval path depends on their spelling now.
+The five names are no longer in the prompt at all, as of 2026-08-15. They were
+there for one reason: `search_opinions` needed canonical spellings, because a
+Pinecone metadata filter is an exact `$eq` with no equivalent of Postgres'
+insensitive mode. Normalizing both the upsert and the filter removed that reason
+(see Code style), and a list with no reason left is the failure below waiting to
+happen — so the list, the "use those exact spellings" instruction and the
+case-sensitivity claim went together.
 
-`SYSTEM_PROMPT` has not caught up: it still tells the agent the metadata filter is
-case-sensitive and to use those exact spellings. Harmless — exact spellings still
-match — but no longer true, and it is the last thing keeping the five names
-load-bearing in the prompt. Deleting that clause is a prompt change, so it needs
-G05–G14 behind it rather than a docs edit.
+Nothing in the prompt now names a city, a neighborhood or a count. The one
+example that did — `"I don't have Tokyo; I cover New York City"` — asserted
+coverage the model could lift verbatim, and it was already wrong once Brooklyn
+and Austin arrived. Verified after the change: "what neighborhoods do you cover?"
+calls `filter_restaurants` and answers with all three cities grouped by state,
+crawled neighborhoods included, and "best ramen shop in tokyo" looks Tokyo up
+before refusing it.
 
 The refusal behaviour G18/G19/G20 grade is unchanged in outcome — an out-of-scope
 place is still refused, now with a lookup behind the refusal rather than a list.
@@ -352,8 +354,15 @@ alone. Both points are measured fabrication in the authored reviews — G19's
 rubric was rewritten on 2026-08-12, so the gap no longer contains judge noise
 and is now fully attributable.
 
-The judge is still an LLM and no score is guaranteed reproducible, but the
-golden that actually flaked has been fixed and no other is currently known to.
+The judge is still an LLM and no score is guaranteed reproducible. G19, the one
+that used to flake, was fixed on 2026-08-12.
+
+**G11 now flakes, on both corpora.** Observed twice on 2026-08-15: it failed a
+full authored run and then passed 3/3 on re-run, and later failed a full
+independent run and passed 3/3 again. Both times `route` and `retrieval` scored
+full marks and only the rubric moved, which is the signature of judge variance
+rather than a regression — a real retrieval break cannot leave retrieval at
+20/20. Re-run G11 before reading anything into a run that contains it.
 
 **Do not describe route and retrieval as "the deterministic checks".** The
 scoring functions in `scoring.ts` are pure and unit-tested, but their *inputs*
