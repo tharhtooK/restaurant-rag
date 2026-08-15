@@ -1,5 +1,6 @@
 import { embedOne, getPineconeIndex, rerank, type RankedIndex } from "@/lib/pinecone";
 import { getLogger } from "@/lib/logger";
+import { normalizeLocationValue } from "@/lib/location";
 
 const log = getLogger("search-opinions");
 
@@ -37,15 +38,21 @@ export type OpinionMatch = {
 
 /**
  * Pinecone metadata filters are exact and case-sensitive, with no equivalent of
- * Postgres' insensitive mode, so a neighborhood whose casing does not match what
- * was upserted returns nothing. The canonical spellings are in the system prompt,
- * which is where the model gets them.
+ * Postgres' insensitive mode, so matching the raw fields meant a neighborhood
+ * whose casing differed from the upsert returned nothing at all - "east village"
+ * scored 0 snippets where "East Village" scored 7. Matching the normalized twins
+ * instead makes city + neighborhood behave like the SQL path, and stops the
+ * canonical spellings in the system prompt from being load-bearing.
  */
 export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, unknown> | null {
   const filters: Record<string, unknown>[] = [];
-  if (input.neighborhood) filters.push({ neighborhood: { $eq: input.neighborhood } });
-  if (input.city) filters.push({ city: { $eq: input.city } });
-  if (input.state) filters.push({ state: { $eq: input.state } });
+  if (input.neighborhood) {
+    filters.push({ neighborhoodNormalized: { $eq: normalizeLocationValue(input.neighborhood) } });
+  }
+  if (input.city) {
+    filters.push({ cityNormalized: { $eq: normalizeLocationValue(input.city) } });
+  }
+  if (input.state) filters.push({ state: { $eq: input.state.toUpperCase() } });
   if (input.restaurantSlugs?.length) {
     filters.push({ restaurantSlug: { $in: input.restaurantSlugs } });
   }

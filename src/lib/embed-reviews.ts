@@ -20,6 +20,7 @@
  */
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
+import { normalizeLocationValue } from "@/lib/location";
 import { embed, getPineconeIndex, type ReviewVectorMetadata } from "@/lib/pinecone";
 
 const log = getLogger("embed-reviews");
@@ -87,7 +88,9 @@ export async function embedReviews(source?: string): Promise<EmbedSummary> {
           restaurantName: review.restaurant.name,
           neighborhood: review.restaurant.neighborhood ?? "",
           city: review.restaurant.city,
-          state: review.restaurant.state,
+          state: review.restaurant.state.toUpperCase(),
+          neighborhoodNormalized: normalizeLocationValue(review.restaurant.neighborhood ?? ""),
+          cityNormalized: normalizeLocationValue(review.restaurant.city),
           source: review.source,
           content: review.content,
         } satisfies ReviewVectorMetadata,

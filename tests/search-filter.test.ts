@@ -11,7 +11,28 @@ describe("buildMetadataFilter", () => {
   // sent to Pinecone stays the simplest form that expresses the constraint.
   test("a lone neighborhood filter is not wrapped in $and", () => {
     assert.deepEqual(buildMetadataFilter({ query: "cosy", neighborhood: "Harlem" }), {
-      neighborhood: { $eq: "Harlem" },
+      neighborhoodNormalized: { $eq: "harlem" },
+    });
+  });
+
+  // Pinecone $eq has no insensitive mode, so casing the model happened to emit
+  // used to decide whether a filtered search returned anything at all.
+  test("neighborhood casing and punctuation do not change the filter", () => {
+    const canonical = buildMetadataFilter({ query: "cosy", neighborhood: "East Village" });
+    for (const variant of ["east village", "EAST VILLAGE", "East  Village"]) {
+      assert.deepEqual(buildMetadataFilter({ query: "cosy", neighborhood: variant }), canonical);
+    }
+  });
+
+  test("city casing does not change the filter", () => {
+    assert.deepEqual(buildMetadataFilter({ query: "cosy", city: "new york" }), {
+      cityNormalized: { $eq: "new york" },
+    });
+  });
+
+  test("state is matched uppercase whatever the model sent", () => {
+    assert.deepEqual(buildMetadataFilter({ query: "cosy", state: "ny" }), {
+      state: { $eq: "NY" },
     });
   });
 
@@ -30,7 +51,7 @@ describe("buildMetadataFilter", () => {
       }),
       {
         $and: [
-          { neighborhood: { $eq: "Harlem" } },
+          { neighborhoodNormalized: { $eq: "harlem" } },
           { restaurantSlug: { $in: ["fette-sau", "lanzhou-noodle"] } },
         ],
       },

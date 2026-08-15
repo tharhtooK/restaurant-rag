@@ -50,6 +50,22 @@ export function parseLocation(input: string): Location | null {
   return { neighborhood, city, state };
 }
 
+/**
+ * A city or neighborhood reduced to a case- and punctuation-free comparison key.
+ *
+ * Postgres matches these insensitively via `mode: "insensitive"`, but Pinecone
+ * metadata filters are exact `$eq` with no insensitive mode, so `"east village"`
+ * from the model returned zero snippets while `"East Village"` returned seven -
+ * a silent empty result, not an error. Both the upsert and the filter run values
+ * through here so the two sides always agree.
+ */
+export function normalizeLocationValue(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 function slugSegment(value: string): string {
   return value
     .toLowerCase()
