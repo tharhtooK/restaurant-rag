@@ -62,12 +62,28 @@ export function buildMetadataFilter(input: SearchOpinionsInput): Record<string, 
   return { $and: filters };
 }
 
-// PINECONE_NAMESPACE lets the eval point retrieval at an isolated corpus
-// (e.g. only independently-sourced reviews). Unset = the default namespace.
-function getSearchIndex() {
-  const base = getPineconeIndex();
-  const namespace = process.env.PINECONE_NAMESPACE;
-  return namespace ? base.namespace(namespace) : base;
+const CRAWLED_NAMESPACE = "crawled";
+
+/**
+ * Which corpora this search reads.
+ *
+ * PINECONE_NAMESPACE pins exactly one, which is how the eval points retrieval at
+ * the independently-sourced corpus. Unpinned, the app must read the crawled
+ * namespace as well as the default one: crawled reviews are embedded there, so
+ * reading only the default meant a city the user had just crawled answered
+ * filter_restaurants while search_opinions returned nothing - the same split
+ * between the SQL and vector paths that the serverless embedding bug caused,
+ * arriving by a different route.
+ *
+ * Scoped by RESTAURANT_DATASET rather than a flag of its own so the two paths
+ * are always excluded together: evals/runner.ts sets it to "seed" and therefore
+ * sees neither crawled rows nor crawled vectors.
+ */
+export function getSearchNamespaces(): (string | undefined)[] {
+  const pinned = process.env.PINECONE_NAMESPACE?.trim();
+  if (pinned) return [pinned];
+  if (process.env.RESTAURANT_DATASET?.trim()) return [undefined];
+  return [undefined, CRAWLED_NAMESPACE];
 }
 
 /**
@@ -98,20 +114,30 @@ export async function searchOpinions(input: SearchOpinionsInput): Promise<Opinio
   const filter = buildMetadataFilter(input);
   const vector = await embedOne(input.query);
 
-  const response = await getSearchIndex().query({
-    vector,
-    topK: Math.max(CANDIDATE_POOL, limit),
-    includeMetadata: true,
-    ...(filter ? { filter } : {}),
-  });
+  const base = getPineconeIndex();
+  const responses = await Promise.all(
+    getSearchNamespaces().map((namespace) =>
+      (namespace ? base.namespace(namespace) : base).query({
+        vector,
+        topK: Math.max(CANDIDATE_POOL, limit),
+        includeMetadata: true,
+        ...(filter ? { filter } : {}),
+      }),
+    ),
+  );
 
-  const candidates = (response.matches ?? []).map((match) => ({
-    restaurantSlug: match.metadata?.restaurantSlug ?? "",
-    restaurantName: match.metadata?.restaurantName ?? "",
-    neighborhood: match.metadata?.neighborhood ?? "",
-    snippet: match.metadata?.content ?? "",
-    score: match.score ?? 0,
-  }));
+  // Each namespace ranks only against itself, so the union is unordered here.
+  // The cross-encoder below is what puts a crawled snippet and a seeded one on
+  // one scale - a raw cosine merge across namespaces would not be comparable.
+  const candidates = responses.flatMap((response) =>
+    (response.matches ?? []).map((match) => ({
+      restaurantSlug: match.metadata?.restaurantSlug ?? "",
+      restaurantName: match.metadata?.restaurantName ?? "",
+      neighborhood: match.metadata?.neighborhood ?? "",
+      snippet: match.metadata?.content ?? "",
+      score: match.score ?? 0,
+    })),
+  );
 
   if (candidates.length === 0) return [];
 
